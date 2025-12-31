@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NeuralMind | AI Training Lab</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Source+Code+Pro:wght@400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <!-- Animated Background -->
+    <div class="neural-bg">
+        <div class="neural-grid"></div>
+        <div class="neural-particles" id="particles"></div>
+    </div>
+
+    <!-- Header -->
+    <header class="header">
+        <div class="logo">
+            <div class="logo-icon">
+                <div class="brain-pulse"></div>
+                <svg viewBox="0 0 100 100" class="brain-svg">
+                    <defs>
+                        <linearGradient id="brainGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                            <stop offset="0%" style="stop-color:#1a73e8"/>
+                            <stop offset="100%" style="stop-color:#4285f4"/>
+                        </linearGradient>
+                    </defs>
+                    <path fill="url(#brainGrad)" d="M50 10c-22 0-40 18-40 40s18 40 40 40 40-18 40-40-18-40-40-40zm0 70c-16.5 0-30-13.5-30-30s13.5-30 30-30 30 13.5 30 30-13.5 30-30 30z"/>
+                    <circle cx="35" cy="40" r="8" fill="url(#brainGrad)" opacity="0.8"/>
+                    <circle cx="65" cy="40" r="8" fill="url(#brainGrad)" opacity="0.8"/>
+                    <circle cx="50" cy="60" r="10" fill="url(#brainGrad)" opacity="0.6"/>
+                    <line x1="35" y1="40" x2="50" y2="60" stroke="url(#brainGrad)" stroke-width="2"/>
+                    <line x1="65" y1="40" x2="50" y2="60" stroke="url(#brainGrad)" stroke-width="2"/>
+                    <line x1="35" y1="40" x2="65" y2="40" stroke="url(#brainGrad)" stroke-width="2"/>
+                </svg>
+            </div>
+            <div class="logo-text">
+                <h1>NEURALMIND</h1>
+                <span class="tagline">AI Training Laboratory</span>
+            </div>
+        </div>
+        <div class="header-stats">
+            <div class="stat-pill">
+                <span class="stat-icon">🧠</span>
+                <span class="stat-label">Vocab</span>
+                <span class="stat-value" id="vocab-count">0</span>
+            </div>
+            <div class="stat-pill">
+                <span class="stat-icon">💾</span>
+                <span class="stat-label">Memory</span>
+                <span class="stat-value" id="memory-count">0</span>
+            </div>
+            <div class="stat-pill">
+                <span class="stat-icon">📚</span>
+                <span class="stat-label">Sites</span>
+                <span class="stat-value" id="sites-count">0</span>
+            </div>
+            <div class="stat-pill status-pill" id="status-pill">
+                <span class="status-dot"></span>
+                <span class="stat-value">IDLE</span>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Container -->
+    <main class="main-container">
+        <!-- Left Panel - Learning Control -->
+        <section class="panel learning-panel">
+            <div class="panel-header">
+                <h2><span class="icon">⚡</span> Learning Engine</h2>
+                <div class="panel-controls">
+                    <button class="btn-icon" id="refresh-btn" title="Refresh Stats">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/>
+                        </svg>
+                    </button>
+                </div>
+            </div>
+
+            <div class="learning-controls">
+                <button class="btn-primary btn-learn" id="learn-btn">
+                    <span class="btn-icon-left">▶</span>
+                    <span class="btn-text">START LEARNING</span>
+                    <div class="btn-glow"></div>
+                </button>
+                <button class="btn-secondary btn-stop" id="stop-btn" disabled>
+                    <span class="btn-icon-left">■</span>
+                    <span class="btn-text">STOP</span>
+                </button>
+            </div>
+
+            <div class="learning-status" id="learning-status">
+                <div class="status-header">
+                    <span class="pulse-dot"></span>
+                    <span>Currently Reading:</span>
+                </div>
+                <div class="current-url" id="current-url">Waiting to start...</div>
+                <div class="content-preview" id="content-preview"></div>
+            </div>
+
+            <div class="progress-section">
+                <div class="progress-header">
+                    <span>Learning Progress</span>
+                    <span id="progress-percent">0%</span>
+                </div>
+                <div class="progress-bar">
+                    <div class="progress-fill" id="progress-fill"></div>
+                    <div class="progress-glow"></div>
+                </div>
+            </div>
+
+            <div class="model-metrics">
+                <h3><span class="icon">📊</span> Model Metrics</h3>
+                <div class="metrics-grid">
+                    <div class="metric-card">
+                        <div class="metric-value" id="tokens-learned">0</div>
+                        <div class="metric-label">Tokens Learned</div>
+                        <div class="metric-trend up">↑ Growing</div>
+                    </div>
+                    <div class="metric-card">
+                        <div class="metric-value" id="training-steps">0</div>
+                        <div class="metric-label">Training Steps</div>
+                        <div class="metric-trend">Active</div>
+                    </div>
+                    <div class="metric-card">
+                        <div class="metric-value" id="embedding-dim">256</div>
+                        <div class="metric-label">Embedding Dim</div>
+                        <div class="metric-trend">d_model</div>
+                    </div>
+                    <div class="metric-card">
+                        <div class="metric-value" id="attention-heads">8</div>
+                        <div class="metric-label">Attention Heads</div>
+                        <div class="metric-trend">Multi-Head</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="recent-sites">
+                <h3><span class="icon">🌐</span> Recently Learned Sites</h3>
+                <div class="sites-list" id="sites-list">
+                    <div class="empty-state">No sites learned yet. Click "Start Learning" to begin!</div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Center Panel - Chat Interface -->
+        <section class="panel chat-panel">
+            <div class="panel-header">
+                <h2><span class="icon">💬</span> Chat with NeuralMind</h2>
+                <div class="panel-controls">
+                    <button class="btn-icon" id="clear-chat" title="Clear Chat">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/>
+                        </svg>
+                    </button>
+                </div>
+            </div>
+
+            <div class="chat-messages" id="chat-messages">
+                <div class="message ai-message">
+                    <div class="message-avatar">🧠</div>
+                    <div class="message-content">
+                        <div class="message-text">Hello! I'm NeuralMind, an AI learning from scratch. I don't know much yet, but I'm eager to learn! You can teach me things, or start my learning engine to let me explore the internet. What would you like to do?</div>
+                        <div class="message-time">Just now</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="chat-input-container">
+                <div class="input-wrapper">
+                    <textarea id="chat-input" placeholder="Type a message or teach me something..." rows="1"></textarea>
+                    <button class="btn-send" id="send-btn">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/>
+                        </svg>
+                    </button>
+                </div>
+                <div class="input-actions">
+                    <button class="action-btn" id="teach-btn" title="Teach Mode">
+                        <span>📚</span> Teach
+                    </button>
+                    <button class="action-btn" id="correct-btn" title="Correct Mode">
+                        <span>✏️</span> Correct
+                    </button>
+                    <button class="action-btn" id="search-learn-btn" title="Search & Learn">
+                        <span>🔍</span> Search & Learn
+                    </button>
+                </div>
+            </div>
+        </section>
+
+        <!-- Right Panel - Knowledge & Teaching -->
+        <section class="panel knowledge-panel">
+            <div class="panel-header">
+                <h2><span class="icon">📖</span> Knowledge Base</h2>
+            </div>
+
+            <div class="tabs">
+                <button class="tab active" data-tab="teach">Teach</button>
+                <button class="tab" data-tab="search">Search</button>
+                <button class="tab" data-tab="history">History</button>
+            </div>
+
+            <div class="tab-content active" id="tab-teach">
+                <div class="teach-section">
+                    <h3>Teach NeuralMind</h3>
+                    <p class="section-desc">Enter knowledge to add to the AI's memory.</p>
+                    <textarea id="teach-content" placeholder="Enter information to teach the AI...
+
+Example: 'Python is a high-level programming language known for its simplicity and readability. It was created by Guido van Rossum and first released in 1991.'"></textarea>
+                    <div class="teach-actions">
+                        <input type="text" id="teach-source" placeholder="Source (optional)" />
+                        <button class="btn-primary" id="submit-teach">
+                            <span>🧠</span> Teach AI
+                        </button>
+                    </div>
+                </div>
+
+                <div class="correction-section">
+                    <h3>Correct a Response</h3>
+                    <p class="section-desc">If the AI gave wrong information, correct it here.</p>
+                    <input type="text" id="wrong-response" placeholder="What did the AI say wrong?" />
+                    <textarea id="correct-info" placeholder="What is the correct information?"></textarea>
+                    <div class="correction-actions">
+                        <label class="checkbox-label">
+                            <input type="checkbox" id="search-correct" checked />
+                            <span>Search internet for verification</span>
+                        </label>
+                        <button class="btn-secondary" id="submit-correction">
+                            <span>✓</span> Submit Correction
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="tab-content" id="tab-search">
+                <div class="search-learn-section">
+                    <h3>Search & Learn</h3>
+                    <p class="section-desc">Search for a topic and teach the AI about it.</p>
+                    <div class="search-input-wrapper">
+                        <input type="text" id="search-query" placeholder="Enter a topic to learn about..." />
+                        <button class="btn-primary" id="submit-search">
+                            <span>🔍</span> Search
+                        </button>
+                    </div>
+                    <div class="search-results" id="search-results">
+                        <div class="empty-state">Enter a topic to search and learn about.</div>
+                    </div>
+                </div>
+
+                <div class="url-learn-section">
+                    <h3>Learn from URL</h3>
+                    <p class="section-desc">Provide a specific URL to learn from.</p>
+                    <div class="url-input-wrapper">
+                        <input type="text" id="learn-url" placeholder="https://en.wikipedia.org/wiki/..." />
+                        <button class="btn-secondary" id="submit-url">
+                            <span>📖</span> Learn
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="tab-content" id="tab-history">
+                <div class="learning-history">
+                    <h3>Learning History</h3>
+                    <div class="history-timeline" id="history-timeline">
+                        <div class="empty-state">No learning history yet.</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="knowledge-stats">
+                <h3><span class="icon">🔬</span> Model Architecture</h3>
+                <div class="architecture-viz">
+                    <div class="arch-layer">
+                        <div class="layer-box input">Input Embedding</div>
+                        <div class="layer-info">d_model: 256</div>
+                    </div>
+                    <div class="arch-arrow">↓</div>
+                    <div class="arch-layer">
+                        <div class="layer-box transformer">Transformer ×6</div>
+                        <div class="layer-info">8 heads, FFN: 1024</div>
+                    </div>
+                    <div class="arch-arrow">↓</div>
+                    <div class="arch-layer">
+                        <div class="layer-box memory">Knowledge Memory</div>
+                        <div class="layer-info" id="memory-info">0 entries</div>
+                    </div>
+                    <div class="arch-arrow">↓</div>
+                    <div class="arch-layer">
+                        <div class="layer-box output">Output Generation</div>
+                        <div class="layer-info">Context-aware</div>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- Toast Notifications -->
+    <div class="toast-container" id="toast-container"></div>
+
+    <!-- Loading Overlay -->
+    <div class="loading-overlay" id="loading-overlay">
+        <div class="loading-spinner">
+            <div class="spinner-ring"></div>
+            <div class="spinner-ring"></div>
+            <div class="spinner-ring"></div>
+            <span class="loading-text">Processing...</span>
+        </div>
+    </div>
+
+    <script src="https://cdn.socket.io/4.6.0/socket.io.min.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>
