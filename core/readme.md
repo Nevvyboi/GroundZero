@@ -949,57 +949,6 @@ python run.py
 
 ---
 
-## 9. Next Steps & Resources
-
-### Beginner Resources
-
-1. **3Blue1Brown - Neural Networks** (YouTube)
-   - Visual, intuitive explanations
-   - Start here: "But what is a neural network?"
-
-2. **Andrew Ng's Machine Learning Course** (Coursera)
-   - Free, comprehensive introduction
-   - Math-friendly but accessible
-
-3. **fast.ai Practical Deep Learning**
-   - Top-down approach (build first, theory later)
-   - Free online course
-
-### Intermediate Resources
-
-4. **"Attention Is All You Need"** (Original Transformer Paper)
-   - The paper that started it all
-   - Read after understanding basics
-
-5. **The Illustrated Transformer** (Jay Alammar's Blog)
-   - Visual walkthrough of transformers
-   - Excellent for building intuition
-
-6. **Hugging Face Course**
-   - Practical NLP with transformers
-   - Free and hands-on
-
-### Books
-
-7. **"Deep Learning" by Goodfellow, Bengio, Courville**
-   - The "bible" of deep learning
-   - Free online: deeplearningbook.org
-
-8. **"Neural Networks and Deep Learning" by Michael Nielsen**
-   - Free online book
-   - Great for understanding fundamentals
-
-### Practice Projects
-
-After NeuralMind, try building:
-
-1. **Sentiment Analyzer:** Is this review positive or negative?
-2. **Text Classifier:** Categorize news articles
-3. **Simple Chatbot:** Basic conversation using retrieval
-4. **Image Classifier:** Using CNNs to recognize objects
-
----
-
 ## Congratulations! 🎉
 
 You've learned:
