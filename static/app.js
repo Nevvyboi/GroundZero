@@ -7,6 +7,7 @@ class NeuralMindApp {
     constructor() {
         this.socket = null;
         this.isLearning = false;
+        this.isSearching = false;  // For manual search animation
         this.isProcessing = false;
         this.pollInterval = null;
         
@@ -482,12 +483,13 @@ class NeuralMindApp {
         previewEl.dataset.wordPos = currentPos;
     }
     
-    // Start word animation when learning
+    // Start word animation when learning or searching
     startWordAnimation() {
         if (this.wordAnimationInterval) return;
         this.wordAnimationInterval = setInterval(() => {
             const previewEl = document.getElementById('content-preview');
-            if (previewEl && this.isLearning && previewEl.dataset.text) {
+            // FIXED: Also animate during manual search (not just continuous learning)
+            if (previewEl && (this.isLearning || this.isSearching) && previewEl.dataset.text) {
                 // FIXED: Don't animate if already at end (prevents vibration)
                 if (previewEl.dataset.animationComplete !== 'true') {
                     this.showAnimatedReading(previewEl.dataset.text);
@@ -501,6 +503,7 @@ class NeuralMindApp {
             clearInterval(this.wordAnimationInterval);
             this.wordAnimationInterval = null;
         }
+        this.isSearching = false;
     }
     
     updateCurrentContent(data) {
@@ -589,8 +592,26 @@ class NeuralMindApp {
     }
     
     async handleAutoSearch(query, initialData) {
+        // Set search state for animation
+        this.isSearching = true;
+        
         // Show search progress UI
         const searchId = this.showSearchProgress(query);
+        
+        // Update the right panel to show we're searching
+        const urlEl = document.getElementById('current-url');
+        const previewEl = document.getElementById('content-preview');
+        const readingHeader = document.querySelector('.currently-reading h4');
+        
+        if (readingHeader) {
+            readingHeader.innerHTML = '🔍 Searching...';
+        }
+        urlEl.textContent = `Searching for: ${query}`;
+        urlEl.href = '#';
+        previewEl.innerHTML = '<span class="reading-word pending">Finding relevant sources...</span>';
+        
+        // Start word animation for search
+        this.startWordAnimation();
         
         try {
             // Step 1: Searching
@@ -608,10 +629,15 @@ class NeuralMindApp {
             // Step 2: Search complete
             this.updateSearchStep(searchId, 'search', 'done', `✓ Found relevant sources`);
             
+            // Update reading header
+            if (readingHeader) {
+                readingHeader.innerHTML = '📖 Currently Reading';
+            }
+            
             if (data.sources_count > 0 || data.learned_sources?.length > 0) {
                 const sources = data.learned_sources || data.sources || [];
                 
-                // Show each source being learned
+                // Show each source being learned with reading animation
                 for (let i = 0; i < sources.length && i < 3; i++) {
                     const source = sources[i];
                     await this.sleep(200);
@@ -621,6 +647,17 @@ class NeuralMindApp {
                     try {
                         domain = new URL(source.url).hostname.replace('www.', '');
                     } catch { domain = 'web'; }
+                    
+                    // Update right panel with source info and animate reading
+                    urlEl.textContent = source.title || domain;
+                    urlEl.href = source.url || '#';
+                    
+                    // Show reading animation for the snippet/content
+                    const content = source.snippet || source.content || `Learning about ${query} from ${domain}...`;
+                    previewEl.dataset.wordPos = '0';
+                    previewEl.dataset.animationComplete = 'false';
+                    previewEl.dataset.text = content;
+                    this.showAnimatedReading(content);
                     
                     this.addSearchStep(searchId, `source-${i}`, 'done', 
                         `📖 Learning from ${domain}: ${source.title?.substring(0, 35) || 'article'}${source.title?.length > 35 ? '...' : ''}`
@@ -638,6 +675,14 @@ class NeuralMindApp {
             await this.sleep(500);
             this.removeSearchProgress(searchId);
             
+            // Stop reading animation and show completion
+            this.isSearching = false;
+            this.stopWordAnimation();
+            if (readingHeader) {
+                readingHeader.innerHTML = '✅ Done Reading';
+            }
+            previewEl.innerHTML = '<span class="reading-word read">Search complete - knowledge acquired!</span>';
+            
             this.addAIMessage(data);
             
             // Update all stats immediately
@@ -645,7 +690,17 @@ class NeuralMindApp {
             this.loadKnowledgeStats();
             
         } catch (e) {
+            this.isSearching = false;
             this.removeSearchProgress(searchId);
+            this.stopWordAnimation();
+            
+            // Reset right panel
+            const readingHeader = document.querySelector('.currently-reading h4');
+            if (readingHeader) {
+                readingHeader.innerHTML = '❌ Search Failed';
+            }
+            document.getElementById('content-preview').innerHTML = '<span class="reading-word pending">Search error occurred</span>';
+            
             this.addMessage("I tried searching but encountered an error. Please try again.", 'ai');
         }
     }

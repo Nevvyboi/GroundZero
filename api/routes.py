@@ -237,6 +237,53 @@ def register_routes(app: Flask):
             'top_knowledge': c['memory'].get_top_knowledge(10)
         })
     
+    @app.route('/api/knowledge/rebuild-index', methods=['POST'])
+    def rebuild_index():
+        """Rebuild the knowledge index from all existing knowledge"""
+        from .server import get_components
+        c = get_components()
+        
+        try:
+            from core.knowledge_index import rebuild_knowledge_index
+            stats = rebuild_knowledge_index(c['memory'])
+            return jsonify({
+                'status': 'success',
+                'message': 'Knowledge index rebuilt',
+                'statistics': stats
+            })
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            return jsonify({
+                'status': 'error',
+                'message': str(e)
+            }), 500
+    
+    @app.route('/api/knowledge/index-stats')
+    def index_stats():
+        """Get knowledge index statistics"""
+        from .server import get_components
+        c = get_components()
+        
+        try:
+            from core.knowledge_index import get_knowledge_index
+            index = get_knowledge_index(c['memory'])
+            if index:
+                return jsonify({
+                    'status': 'success',
+                    'statistics': index.get_statistics()
+                })
+            else:
+                return jsonify({
+                    'status': 'not_initialized',
+                    'statistics': {}
+                })
+        except Exception as e:
+            return jsonify({
+                'status': 'error',
+                'message': str(e)
+            }), 500
+    
     @app.route('/api/model/stats')
     def model_stats():
         from .server import get_components

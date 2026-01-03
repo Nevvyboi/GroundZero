@@ -132,11 +132,14 @@ class MemoryStore:
         summary: Optional[str] = None,
         source_url: Optional[str] = None,
         source_title: Optional[str] = None,
-        confidence: float = 0.5
+        confidence: float = 0.5,
+        topic: Optional[str] = None,
+        metadata: Optional[Dict] = None
     ) -> Tuple[int, bool]:
         """
         Store a piece of knowledge.
         Returns (id, is_new) tuple.
+        Also updates the knowledge index.
         """
         content_hash = self._hash_content(content)
         
@@ -165,27 +168,106 @@ class MemoryStore:
             'source_title': source_title,
             'confidence': confidence
         })
+        
+        # Add to knowledge index
+        try:
+            from core.knowledge_index import get_knowledge_index
+            index = get_knowledge_index(self)
+            if index:
+                index.add_knowledge(
+                    doc_id=knowledge_id,
+                    content=content,
+                    summary=summary or '',
+                    source_url=source_url or '',
+                    source_title=source_title or '',
+                    confidence=confidence
+                )
+        except Exception as e:
+            print(f"Failed to add to index: {e}")
+        
+        # Add topic/concept if provided
+        if topic:
+            self.add_concept(topic)
+        
         return knowledge_id, True
     
     def get_knowledge_count(self) -> int:
         """Get total knowledge entries"""
         return self.db.count('knowledge')
-    
     def search_knowledge(self, query: str, limit: int = 10) -> List[Dict]:
-        """Search knowledge by content (case-insensitive LIKE search)"""
-        # Make the search case-insensitive and handle punctuation
-        clean_query = query.lower().strip().rstrip('?!.,')
+        """
+        Search knowledge base using knowledge index first, then SQL fallback.
+        """
+        if not query:
+            return []
         
+        # Try knowledge index first (TF-IDF + topic-based search)
+        try:
+            from core.knowledge_index import get_knowledge_index
+            index = get_knowledge_index(self)
+            
+            if index and index.doc_count > 0:
+                results = index.search(query, limit=limit)
+                if results:
+                    return results
+        except Exception as e:
+            print(f"Knowledge index search failed, falling back to SQL: {e}")
+        
+        # Fallback to SQL-based search
+        return self._sql_search_knowledge(query, limit)
+
+    def _sql_search_knowledge(self, query: str, limit: int = 10) -> List[Dict]:
+        """
+        SQL-based fallback search with multiple strategies.
+        """
+        results = []
+        seen_ids = set()
+        
+        # Strategy 1: Exact phrase match in content or title
         rows = self.db.fetch_all(
-            """SELECT id, content, summary, source_url, source_title, confidence, access_count
+            """SELECT id, content, summary, source_url, source_title, confidence
                FROM knowledge 
-               WHERE LOWER(content) LIKE ? OR LOWER(summary) LIKE ? OR LOWER(source_title) LIKE ?
+               WHERE content LIKE ? OR source_title LIKE ?
                ORDER BY confidence DESC, access_count DESC
                LIMIT ?""",
-            (f"%{clean_query}%", f"%{clean_query}%", f"%{clean_query}%", limit)
+            (f'%{query}%', f'%{query}%', limit)
         )
-        return [dict(row) for row in rows]
-    
+        
+        for row in rows:
+            if row['id'] not in seen_ids:
+                seen_ids.add(row['id'])
+                results.append({
+                    **dict(row),
+                    'relevance': 0.9
+                })
+        
+        # Strategy 2: Individual word search
+        if len(results) < limit:
+            words = [w.strip() for w in query.split() if len(w.strip()) > 2]
+            for word in words[:5]:
+                rows = self.db.fetch_all(
+                    """SELECT id, content, summary, source_url, source_title, confidence
+                       FROM knowledge 
+                       WHERE content LIKE ? OR source_title LIKE ?
+                       ORDER BY confidence DESC
+                       LIMIT ?""",
+                    (f'%{word}%', f'%{word}%', limit - len(results))
+                )
+                
+                for row in rows:
+                    if row['id'] not in seen_ids:
+                        seen_ids.add(row['id'])
+                        results.append({
+                            **dict(row),
+                            'relevance': 0.6
+                        })
+        
+        # Sort by relevance then confidence
+        results.sort(key=lambda x: (x.get('relevance', 0), x.get('confidence', 0)), reverse=True)
+        
+        return results[:limit]
+
+
     def get_top_knowledge(self, limit: int = 20) -> List[Dict]:
         """Get most confident/accessed knowledge"""
         rows = self.db.fetch_all(

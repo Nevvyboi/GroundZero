@@ -44,6 +44,17 @@ def create_app(settings: Settings):
     memory = MemoryStore(db)
     model_store = ModelStore(settings.weights_path, settings.embeddings_path, settings.state_path)
     
+    # Initialize knowledge index (indexes existing knowledge)
+    print("🔍 Initializing knowledge index...")
+    try:
+        from core.knowledge_index import get_knowledge_index
+        index = get_knowledge_index(memory)
+        if index:
+            stats = index.get_statistics()
+            print(f"   📚 Indexed {stats['total_documents']} documents with {stats['total_terms']} terms")
+    except Exception as e:
+        print(f"   ⚠️ Knowledge index initialization failed: {e}")
+    
     # Initialize neural model
     print("🧠 Initializing neural model...")
     neural_model = NeuralModel(settings.model, memory, model_store)
@@ -87,7 +98,7 @@ def create_app(settings: Settings):
 
 def run_server(app, socketio, settings: Settings):
     """Run the server"""
-    socketio.run(app, host=settings.HOST, port=settings.PORT, debug=settings.DEBUG)
+    socketio.run(app, host=settings.HOST, port=settings.PORT, debug=settings.DEBUG, allow_unsafe_werkzeug=True)
 
 
 def get_components():
