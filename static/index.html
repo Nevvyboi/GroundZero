@@ -1,0 +1,766 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NeuralMind - AI Learning System</title>
+    <link rel="stylesheet" href="/static/styles.css">
+    <style>
+        /* Session History Styles */
+        .stats-panel {
+            position: relative;
+        }
+        
+        .expand-btn {
+            position: absolute;
+            top: 12px;
+            right: 12px;
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-color);
+            color: var(--text-secondary);
+            padding: 4px 10px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 12px;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            transition: all 0.2s;
+        }
+        
+        .expand-btn:hover {
+            background: var(--accent-color);
+            color: white;
+            border-color: var(--accent-color);
+        }
+        
+        .expand-btn .arrow {
+            transition: transform 0.3s;
+        }
+        
+        .expand-btn.expanded .arrow {
+            transform: rotate(180deg);
+        }
+        
+        .session-history {
+            max-height: 0;
+            overflow: hidden;
+            transition: max-height 0.3s ease-out;
+            margin-top: 0;
+        }
+        
+        .session-history.expanded {
+            max-height: 500px;
+            margin-top: 16px;
+            overflow-y: auto;
+        }
+        
+        .session-summary {
+            background: var(--bg-tertiary);
+            border-radius: 8px;
+            padding: 12px;
+            margin-bottom: 12px;
+            border: 1px solid var(--border-color);
+        }
+        
+        .session-summary h4 {
+            margin: 0 0 10px 0;
+            color: var(--text-primary);
+            font-size: 13px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        
+        .summary-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 8px;
+        }
+        
+        .summary-item {
+            text-align: center;
+            padding: 8px;
+            background: var(--bg-secondary);
+            border-radius: 6px;
+        }
+        
+        .summary-value {
+            font-size: 18px;
+            font-weight: 700;
+            color: var(--accent-color);
+        }
+        
+        .summary-label {
+            font-size: 10px;
+            color: var(--text-muted);
+            text-transform: uppercase;
+        }
+        
+        .session-list {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+        
+        .session-item {
+            background: var(--bg-tertiary);
+            border-radius: 8px;
+            padding: 10px 12px;
+            border: 1px solid var(--border-color);
+            transition: all 0.2s;
+        }
+        
+        .session-item:hover {
+            border-color: var(--accent-color);
+        }
+        
+        .session-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 6px;
+        }
+        
+        .session-id {
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+        
+        .session-status {
+            font-size: 10px;
+            padding: 2px 6px;
+            border-radius: 4px;
+            background: var(--success-color);
+            color: white;
+        }
+        
+        .session-status.active {
+            background: var(--accent-color);
+        }
+        
+        .session-stats-row {
+            display: flex;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+        
+        .session-stat {
+            font-size: 11px;
+            color: var(--text-secondary);
+        }
+        
+        .session-stat strong {
+            color: var(--text-primary);
+        }
+        
+        .session-date {
+            font-size: 10px;
+            color: var(--text-muted);
+            margin-top: 4px;
+        }
+        
+        .no-sessions {
+            text-align: center;
+            color: var(--text-muted);
+            font-size: 12px;
+            padding: 20px;
+        }
+        
+        /* Total time display */
+        .total-time-display {
+            background: linear-gradient(135deg, var(--accent-color), var(--accent-hover));
+            border-radius: 8px;
+            padding: 12px;
+            margin-top: 12px;
+            text-align: center;
+            color: white;
+        }
+        
+        .total-time-label {
+            font-size: 11px;
+            opacity: 0.9;
+            text-transform: uppercase;
+        }
+        
+        .total-time-value {
+            font-size: 24px;
+            font-weight: 700;
+            margin-top: 4px;
+        }
+        
+        /* Current session stats */
+        .current-session-stats {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+        
+        .session-stat-row {
+            display: flex;
+            justify-content: space-between;
+            font-size: 13px;
+            padding: 6px 0;
+            border-bottom: 1px solid var(--border-color);
+        }
+        
+        .session-stat-row:last-child {
+            border-bottom: none;
+        }
+        
+        .session-stat-row span {
+            color: var(--text-secondary);
+        }
+        
+        .session-stat-row strong {
+            color: var(--accent-color);
+        }
+        
+        .help-text {
+            font-size: 11px;
+            color: var(--text-muted);
+            margin-top: 8px;
+        }
+    </style>
+</head>
+<body>
+    <header class="header">
+        <div class="logo">
+            <span class="logo-icon">🧠</span>
+            <div class="logo-text">
+                <h1>NeuralMind</h1>
+                <span>AI that learns from scratch</span>
+            </div>
+        </div>
+        <div class="header-stats">
+            <div class="stat-pill"><span class="stat-icon">📝</span><span id="vocab-count">0</span> words</div>
+            <div class="stat-pill"><span class="stat-icon">💾</span><span id="knowledge-count">0</span> knowledge</div>
+            <div class="stat-pill"><span class="stat-icon">🌐</span><span id="sources-count">0</span> sources</div>
+            <div class="stat-pill status" id="status-indicator"><span class="pulse"></span>Ready</div>
+        </div>
+    </header>
+
+    <main class="main">
+        <!-- Left Sidebar - Learning -->
+        <aside class="sidebar left-sidebar">
+            <div class="panel">
+                <h2>⚡ Learning Engine</h2>
+                <div class="learning-controls">
+                    <button class="btn btn-primary" id="start-btn">▶ Start</button>
+                    <button class="btn btn-secondary" id="stop-btn" disabled>■ Stop</button>
+                </div>
+                
+                <!-- Learning Timer -->
+                <div class="learning-timer" id="learning-timer">
+                    <div class="timer-icon">⏱️</div>
+                    <div class="timer-display">
+                        <span class="timer-label">Session Time</span>
+                        <span class="timer-value" id="timer-value">00:00:00</span>
+                    </div>
+                    <div class="timer-status" id="timer-status">Stopped</div>
+                </div>
+                
+                <!-- Knowledge Explorer Button -->
+                <button class="btn btn-accent btn-full" id="knowledge-explorer-btn" style="margin-top: 12px;">
+                    🔬 Knowledge Explorer
+                </button>
+                
+                <div class="currently-reading">
+                    <div class="reading-header">
+                        <h4>📖 Currently Reading</h4>
+                        <button class="btn-zoom" id="zoom-btn" title="View full content">
+                            <span class="zoom-icon">🔍</span>
+                            <span class="zoom-text">Zoom</span>
+                        </button>
+                    </div>
+                    <a href="#" id="current-url" target="_blank">Waiting to start...</a>
+                    <div class="content-preview" id="content-preview">Start learning to see content here...</div>
+                </div>
+                
+                <!-- Zoom Modal -->
+                <div class="zoom-modal" id="zoom-modal">
+                    <div class="zoom-modal-content">
+                        <div class="zoom-modal-header">
+                            <h3 id="zoom-title">Full Content</h3>
+                            <button class="zoom-close" id="zoom-close">&times;</button>
+                        </div>
+                        <div class="zoom-modal-body" id="zoom-body">
+                            <div class="zoom-content" id="zoom-content">No content loaded yet.</div>
+                        </div>
+                        <div class="zoom-modal-footer">
+                            <span class="zoom-stats" id="zoom-stats">0 words</span>
+                            <a href="#" id="zoom-source" target="_blank">View Source</a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Model Stats with Expandable Session History -->
+            <div class="panel stats-panel">
+                <h2>📊 Model Stats</h2>
+                <button class="expand-btn" id="expand-sessions-btn">
+                    <span>Sessions</span>
+                    <span class="arrow">▼</span>
+                </button>
+                
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="stat-value" id="vocab-stat">0</div>
+                        <div class="stat-label">Vocabulary</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value" id="tokens-count">0</div>
+                        <div class="stat-label">Words</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value" id="knowledge-stat">0</div>
+                        <div class="stat-label">Knowledge</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value" id="sources-stat">0</div>
+                        <div class="stat-label">Sources</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value" id="sessions-count">0</div>
+                        <div class="stat-label">Sessions</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value" id="vectors-count">0</div>
+                        <div class="stat-label">Vectors</div>
+                    </div>
+                </div>
+                
+                <!-- Total Learning Time -->
+                <div class="total-time-display">
+                    <div class="total-time-label">Total Learning Time</div>
+                    <div class="total-time-value" id="total-learning-time">00:00:00</div>
+                </div>
+                
+                <!-- Expandable Session History -->
+                <div class="session-history" id="session-history">
+                    <div class="session-summary">
+                        <h4>📈 All-Time Summary</h4>
+                        <div class="summary-grid">
+                            <div class="summary-item">
+                                <div class="summary-value" id="total-sessions">0</div>
+                                <div class="summary-label">Sessions</div>
+                            </div>
+                            <div class="summary-item">
+                                <div class="summary-value" id="total-articles">0</div>
+                                <div class="summary-label">Articles</div>
+                            </div>
+                            <div class="summary-item">
+                                <div class="summary-value" id="total-words-learned">0</div>
+                                <div class="summary-label">Words</div>
+                            </div>
+                            <div class="summary-item">
+                                <div class="summary-value" id="total-knowledge-added">0</div>
+                                <div class="summary-label">Knowledge</div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <h4 style="margin: 0 0 8px 0; font-size: 13px; color: var(--text-primary);">📜 Session History</h4>
+                    <div class="session-list" id="session-list">
+                        <div class="no-sessions">No sessions yet. Start learning!</div>
+                    </div>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Main Chat Area -->
+        <section class="chat-section">
+            <div class="chat-messages" id="chat-messages">
+                <div class="message ai">
+                    <div class="avatar">🧠</div>
+                    <div class="content">
+                        <p>Hello! I'm <strong>NeuralMind</strong>, an AI that learns from scratch.</p>
+                        <p>I start with zero knowledge and learn by reading the web. If I don't know something, I'll <strong>automatically search and learn</strong> about it!</p>
+                        <p>Try asking me anything - I'll either answer from what I know, or search to find out.</p>
+                        <span class="time">Just now</span>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="chat-input-area">
+                <textarea id="chat-input" placeholder="Ask me anything... I'll search if I don't know!" rows="1"></textarea>
+                <button class="btn btn-primary btn-send" id="send-btn">
+                    <span class="send-icon">➤</span>
+                </button>
+            </div>
+        </section>
+
+        <!-- Right Sidebar - Tools -->
+        <aside class="sidebar right-sidebar">
+            <div class="panel">
+                <h2>📚 Teach AI</h2>
+                <textarea id="teach-content" placeholder="Enter knowledge..." rows="2"></textarea>
+                <button class="btn btn-accent btn-full" id="teach-btn">🧠 Teach</button>
+            </div>
+            
+            <div class="panel">
+                <h2>🔍 Manual Learn</h2>
+                <input type="text" id="learn-url" placeholder="Paste any URL...">
+                <button class="btn btn-primary btn-full" id="learn-url-btn">🌐 Learn from URL</button>
+                <p class="help-text">💡 URLs are only learned once - duplicates are skipped!</p>
+            </div>
+            
+            <div class="panel">
+                <h2>🌐 Recent Sources</h2>
+                <div id="learned-sources" class="sources-list">
+                    <p class="empty-text">No sources yet</p>
+                </div>
+            </div>
+            
+            <div class="panel">
+                <h2>📝 Current Session</h2>
+                <div class="current-session-stats">
+                    <div class="session-stat-row">
+                        <span>Articles:</span>
+                        <strong id="current-articles">0</strong>
+                    </div>
+                    <div class="session-stat-row">
+                        <span>Words:</span>
+                        <strong id="current-words">0</strong>
+                    </div>
+                    <div class="session-stat-row">
+                        <span>Knowledge:</span>
+                        <strong id="current-knowledge">0</strong>
+                    </div>
+                </div>
+            </div>
+        </aside>
+    </main>
+
+    <!-- Knowledge Explorer Modal -->
+    <div class="knowledge-explorer-modal" id="knowledge-explorer-modal">
+        <div class="ke-modal-content">
+            <div class="ke-modal-header">
+                <h3>🔬 Knowledge Explorer</h3>
+                <button class="ke-close" id="ke-close">&times;</button>
+            </div>
+            <div class="ke-body-wrapper">
+                <div class="ke-modal-body">
+                    <div class="ke-search">
+                        <input type="text" id="ke-search-input" placeholder="🔍 Search topics...">
+                    </div>
+                    <div class="ke-list" id="ke-list">
+                        <div class="ke-loading">Loading knowledge base...</div>
+                    </div>
+                </div>
+                <div class="ke-detail-panel" id="ke-detail-panel">
+                    <div class="ke-detail-header">
+                        <h4 id="ke-detail-title">Select a topic</h4>
+                        <span class="ke-confidence" id="ke-detail-confidence"></span>
+                    </div>
+                    <div class="ke-related">
+                        <h5>🔗 Related Topics</h5>
+                        <div class="ke-related-list" id="ke-related-list">
+                            <p class="empty-text">Click on a topic to see related concepts</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <style>
+        /* Knowledge Explorer Modal */
+        .knowledge-explorer-modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.6);
+            z-index: 9999;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .knowledge-explorer-modal.active {
+            display: flex;
+        }
+        
+        .ke-modal-content {
+            background: var(--bg-card);
+            border-radius: 16px;
+            width: 90%;
+            max-width: 1000px;
+            height: 80vh;
+            max-height: 650px;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            box-shadow: 0 25px 80px rgba(0, 0, 0, 0.3);
+            border: 1px solid var(--border);
+        }
+        
+        .ke-modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 18px 24px;
+            border-bottom: 1px solid var(--border);
+            background: var(--bg);
+            flex-shrink: 0;
+        }
+        
+        .ke-modal-header h3 {
+            margin: 0;
+            font-size: 18px;
+            color: var(--text);
+            font-weight: 600;
+        }
+        
+        .ke-close {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            font-size: 18px;
+            cursor: pointer;
+            color: var(--text-muted);
+            width: 32px;
+            height: 32px;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s;
+        }
+        
+        .ke-close:hover {
+            background: #ef4444;
+            color: white;
+            border-color: #ef4444;
+        }
+        
+        .ke-body-wrapper {
+            display: flex;
+            flex: 1;
+            overflow: hidden;
+        }
+        
+        .ke-modal-body {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            border-right: 1px solid var(--border);
+        }
+        
+        .ke-search {
+            padding: 16px 20px;
+            border-bottom: 1px solid var(--border);
+            background: var(--bg);
+            flex-shrink: 0;
+        }
+        
+        .ke-search input {
+            width: 100%;
+            padding: 12px 16px;
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            background: var(--bg-card);
+            color: var(--text);
+            font-size: 14px;
+            transition: border-color 0.2s;
+        }
+        
+        .ke-search input:focus {
+            outline: none;
+            border-color: var(--primary);
+        }
+        
+        .ke-search input::placeholder {
+            color: var(--text-muted);
+        }
+        
+        .ke-list {
+            flex: 1;
+            overflow-y: auto;
+            padding: 16px;
+            background: var(--bg-card);
+        }
+        
+        .ke-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 14px 16px;
+            margin-bottom: 8px;
+            background: var(--bg);
+            border-radius: 10px;
+            cursor: pointer;
+            border: 2px solid transparent;
+            transition: all 0.2s;
+        }
+        
+        .ke-item:hover {
+            border-color: var(--primary);
+            background: #eff6ff;
+        }
+        
+        .ke-item.selected {
+            border-color: var(--primary);
+            background: #dbeafe;
+        }
+        
+        .ke-item-title {
+            font-size: 14px;
+            color: var(--text);
+            font-weight: 500;
+            flex: 1;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            margin-right: 12px;
+        }
+        
+        .ke-item-confidence {
+            font-size: 12px;
+            padding: 5px 12px;
+            border-radius: 20px;
+            background: var(--primary);
+            color: white;
+            font-weight: 600;
+            flex-shrink: 0;
+        }
+        
+        .ke-detail-panel {
+            width: 300px;
+            background: var(--bg);
+            padding: 20px;
+            overflow-y: auto;
+            flex-shrink: 0;
+        }
+        
+        .ke-detail-header {
+            margin-bottom: 20px;
+            padding-bottom: 16px;
+            border-bottom: 1px solid var(--border);
+        }
+        
+        .ke-detail-header h4 {
+            margin: 0 0 12px 0;
+            font-size: 16px;
+            color: var(--text);
+            font-weight: 600;
+            line-height: 1.4;
+        }
+        
+        .ke-confidence {
+            display: none;
+            font-size: 12px;
+            padding: 5px 12px;
+            border-radius: 20px;
+            background: var(--accent);
+            color: white;
+            font-weight: 600;
+        }
+        
+        .ke-related h5 {
+            margin: 0 0 14px 0;
+            font-size: 14px;
+            color: var(--text-secondary);
+            font-weight: 600;
+        }
+        
+        .ke-related-list {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+        
+        .ke-related-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px 14px;
+            background: var(--bg-card);
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.2s;
+            border: 1px solid var(--border);
+        }
+        
+        .ke-related-item:hover {
+            background: #eff6ff;
+            border-color: var(--primary);
+        }
+        
+        .ke-related-title {
+            font-size: 13px;
+            color: var(--text);
+            flex: 1;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            margin-right: 10px;
+        }
+        
+        .ke-related-similarity {
+            font-size: 11px;
+            padding: 3px 8px;
+            border-radius: 12px;
+            background: var(--accent);
+            color: white;
+            font-weight: 600;
+            flex-shrink: 0;
+        }
+        
+        .ke-loading,
+        .ke-loading-small {
+            text-align: center;
+            color: var(--text-muted);
+            padding: 40px 20px;
+            font-size: 14px;
+        }
+        
+        .ke-loading-small {
+            padding: 20px;
+        }
+        
+        .ke-empty {
+            text-align: center;
+            color: var(--text-muted);
+            padding: 60px 20px;
+            font-size: 14px;
+            line-height: 1.6;
+        }
+        
+        .ke-hint {
+            color: var(--text-muted);
+            font-size: 13px;
+            text-align: center;
+            padding: 20px;
+            margin: 0;
+        }
+        
+        @media (max-width: 768px) {
+            .ke-modal-content {
+                width: 95%;
+                height: 90vh;
+            }
+            
+            .ke-body-wrapper {
+                flex-direction: column;
+            }
+            
+            .ke-modal-body {
+                border-right: none;
+                border-bottom: 1px solid var(--border);
+            }
+            
+            .ke-detail-panel {
+                width: 100%;
+                max-height: 220px;
+            }
+        }
+    </style>
+
+    <div id="toast-container"></div>
+    <script src="/static/app.js"></script>
+</body>
+</html>
