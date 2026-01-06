@@ -3,10 +3,10 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>NeuralMind - AI Learning System</title>
+    <title>GroundZero - AI Learning System</title>
     <link rel="stylesheet" href="/static/styles.css">
     <style>
-        /* Session History Styles */
+        /* Session History Styles - Using correct CSS vars */
         .stats-panel {
             position: relative;
         }
@@ -15,8 +15,8 @@
             position: absolute;
             top: 12px;
             right: 12px;
-            background: var(--bg-tertiary);
-            border: 1px solid var(--border-color);
+            background: var(--bg);
+            border: 1px solid var(--border);
             color: var(--text-secondary);
             padding: 4px 10px;
             border-radius: 6px;
@@ -29,9 +29,9 @@
         }
         
         .expand-btn:hover {
-            background: var(--accent-color);
+            background: var(--accent);
             color: white;
-            border-color: var(--accent-color);
+            border-color: var(--accent);
         }
         
         .expand-btn .arrow {
@@ -45,27 +45,30 @@
         .session-history {
             max-height: 0;
             overflow: hidden;
-            transition: max-height 0.3s ease-out;
+            transition: max-height 0.3s ease-out, margin 0.3s ease-out, padding 0.3s ease-out;
             margin-top: 0;
+            padding-top: 0;
         }
         
         .session-history.expanded {
-            max-height: 500px;
+            max-height: 400px;
             margin-top: 16px;
+            padding-top: 12px;
             overflow-y: auto;
+            border-top: 1px solid var(--border);
         }
         
         .session-summary {
-            background: var(--bg-tertiary);
+            background: var(--bg);
             border-radius: 8px;
             padding: 12px;
             margin-bottom: 12px;
-            border: 1px solid var(--border-color);
+            border: 1px solid var(--border);
         }
         
         .session-summary h4 {
             margin: 0 0 10px 0;
-            color: var(--text-primary);
+            color: var(--text);
             font-size: 13px;
             display: flex;
             align-items: center;
@@ -81,14 +84,14 @@
         .summary-item {
             text-align: center;
             padding: 8px;
-            background: var(--bg-secondary);
+            background: var(--bg-card);
             border-radius: 6px;
         }
         
         .summary-value {
             font-size: 18px;
             font-weight: 700;
-            color: var(--accent-color);
+            color: var(--accent);
         }
         
         .summary-label {
@@ -104,15 +107,15 @@
         }
         
         .session-item {
-            background: var(--bg-tertiary);
+            background: var(--bg);
             border-radius: 8px;
             padding: 10px 12px;
-            border: 1px solid var(--border-color);
+            border: 1px solid var(--border);
             transition: all 0.2s;
         }
         
         .session-item:hover {
-            border-color: var(--accent-color);
+            border-color: var(--accent);
         }
         
         .session-header {
@@ -125,25 +128,27 @@
         .session-id {
             font-size: 12px;
             font-weight: 600;
-            color: var(--text-primary);
+            color: var(--text);
         }
         
         .session-status {
             font-size: 10px;
             padding: 2px 6px;
             border-radius: 4px;
-            background: var(--success-color);
+            background: var(--accent);
             color: white;
         }
         
         .session-status.active {
-            background: var(--accent-color);
+            background: var(--primary);
         }
         
         .session-stats-row {
             display: flex;
             gap: 12px;
             flex-wrap: wrap;
+            font-size: 11px;
+            color: var(--text-secondary);
         }
         
         .session-stat {
@@ -152,7 +157,7 @@
         }
         
         .session-stat strong {
-            color: var(--text-primary);
+            color: var(--text);
         }
         
         .session-date {
@@ -170,7 +175,7 @@
         
         /* Total time display */
         .total-time-display {
-            background: linear-gradient(135deg, var(--accent-color), var(--accent-hover));
+            background: linear-gradient(135deg, var(--accent), var(--accent-hover));
             border-radius: 8px;
             padding: 12px;
             margin-top: 12px;
@@ -202,7 +207,7 @@
             justify-content: space-between;
             font-size: 13px;
             padding: 6px 0;
-            border-bottom: 1px solid var(--border-color);
+            border-bottom: 1px solid var(--border);
         }
         
         .session-stat-row:last-child {
@@ -214,13 +219,117 @@
         }
         
         .session-stat-row strong {
-            color: var(--accent-color);
+            color: var(--accent);
         }
         
         .help-text {
             font-size: 11px;
             color: var(--text-muted);
             margin-top: 8px;
+        }
+        
+        /* Fullscreen Button */
+        .btn-fullscreen {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 6px 12px;
+            background: linear-gradient(135deg, var(--primary) 0%, #6366f1 100%);
+            border: none;
+            border-radius: 8px;
+            color: white;
+            font-size: 12px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            margin-left: 8px;
+        }
+        
+        .btn-fullscreen:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(59, 130, 246, 0.4);
+        }
+        
+        .btn-fullscreen .fs-icon {
+            font-size: 14px;
+        }
+        
+        .btn-fullscreen.is-fullscreen {
+            background: linear-gradient(135deg, var(--accent) 0%, #059669 100%);
+        }
+        
+        .btn-fullscreen.is-fullscreen .fs-text::after {
+            content: 'Exit';
+        }
+        
+        .btn-fullscreen.is-fullscreen .fs-text {
+            font-size: 0;
+        }
+        
+        .btn-fullscreen.is-fullscreen .fs-text::after {
+            font-size: 12px;
+        }
+        
+        /* Clear Chat Button - in chat input area */
+        .btn-clear-chat {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 42px;
+            height: 42px;
+            background: var(--bg);
+            border: 1px solid var(--border);
+            border-radius: 50%;
+            font-size: 16px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            flex-shrink: 0;
+        }
+        
+        .btn-clear-chat:hover {
+            background: #fee2e2;
+            border-color: #fca5a5;
+        }
+        
+        /* Knowledge Explorer Button - prominent style */
+        .btn-explorer {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            width: 100%;
+            padding: 14px 16px;
+            background: linear-gradient(135deg, #8b5cf6 0%, #6366f1 100%);
+            border: none;
+            border-radius: 12px;
+            color: white;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            margin-bottom: 12px;
+            box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
+        }
+        
+        .btn-explorer:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(99, 102, 241, 0.4);
+        }
+        
+        .btn-explorer .explorer-icon {
+            font-size: 18px;
+        }
+        
+        .btn-explorer .explorer-text {
+            flex: 1;
+            text-align: left;
+        }
+        
+        .btn-explorer .explorer-badge {
+            background: rgba(255, 255, 255, 0.2);
+            padding: 4px 10px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 700;
         }
     </style>
 </head>
@@ -229,7 +338,7 @@
         <div class="logo">
             <span class="logo-icon">🧠</span>
             <div class="logo-text">
-                <h1>NeuralMind</h1>
+                <h1>GroundZero</h1>
                 <span>AI that learns from scratch</span>
             </div>
         </div>
@@ -238,6 +347,10 @@
             <div class="stat-pill"><span class="stat-icon">💾</span><span id="knowledge-count">0</span> knowledge</div>
             <div class="stat-pill"><span class="stat-icon">🌐</span><span id="sources-count">0</span> sources</div>
             <div class="stat-pill status" id="status-indicator"><span class="pulse"></span>Ready</div>
+            <button class="btn-fullscreen" id="fullscreen-btn" title="Toggle Fullscreen">
+                <span class="fs-icon" id="fs-icon">⛶</span>
+                <span class="fs-text">Fullscreen</span>
+            </button>
         </div>
     </header>
 
@@ -260,11 +373,6 @@
                     </div>
                     <div class="timer-status" id="timer-status">Stopped</div>
                 </div>
-                
-                <!-- Knowledge Explorer Button -->
-                <button class="btn btn-accent btn-full" id="knowledge-explorer-btn" style="margin-top: 12px;">
-                    🔬 Knowledge Explorer
-                </button>
                 
                 <div class="currently-reading">
                     <div class="reading-header">
@@ -384,6 +492,9 @@
             </div>
             
             <div class="chat-input-area">
+                <button class="btn-clear-chat" id="clear-chat-btn" title="Clear chat context">
+                    🗑️
+                </button>
                 <textarea id="chat-input" placeholder="Ask me anything... I'll search if I don't know!" rows="1"></textarea>
                 <button class="btn btn-primary btn-send" id="send-btn">
                     <span class="send-icon">➤</span>
@@ -393,6 +504,13 @@
 
         <!-- Right Sidebar - Tools -->
         <aside class="sidebar right-sidebar">
+            <!-- Knowledge Explorer - Prominent at top -->
+            <button class="btn btn-explorer" id="knowledge-explorer-btn">
+                <span class="explorer-icon">🔬</span>
+                <span class="explorer-text">Knowledge Explorer</span>
+                <span class="explorer-badge" id="knowledge-badge">0</span>
+            </button>
+            
             <div class="panel">
                 <h2>📚 Teach AI</h2>
                 <textarea id="teach-content" placeholder="Enter knowledge..." rows="2"></textarea>

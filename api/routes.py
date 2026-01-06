@@ -50,22 +50,28 @@ async def index():
 
 @router.get("/api/status")
 async def status():
-    """Get system status"""
+    """Get system status including Knowledge Graph"""
     from .server import get_components
     c = get_components()
     
-    return {
+    response = {
         'status': 'online',
         'timestamp': datetime.now().isoformat(),
         'stats': c['learner'].get_stats() if c['learner'] else {}
     }
+    
+    # Add Knowledge Graph stats if available
+    if c.get('graph_reasoner'):
+        response['knowledge_graph'] = c['graph_reasoner'].get_stats()
+    
+    return response
 
 
 # ==================== CHAT ====================
 
 @router.post("/api/chat")
 async def chat(request: ChatRequest):
-    """Main chat endpoint - semantic search + response"""
+    """Main chat endpoint - semantic search + response with context"""
     from .server import get_components
     c = get_components()
     
@@ -75,7 +81,8 @@ async def chat(request: ChatRequest):
         raise HTTPException(status_code=400, detail="No message provided")
     
     try:
-        result = c['response_generator'].generate(message)
+        # Generate with conversation context
+        result = c['response_generator'].generate(message, session_id="default")
         
         if request.auto_search and result.get('needs_search', False):
             return {
@@ -102,6 +109,16 @@ async def chat(request: ChatRequest):
             'sources': [],
             'error': str(e)
         }
+
+
+@router.post("/api/chat/clear-context")
+async def clear_chat_context():
+    """Clear conversation context"""
+    from .server import get_components
+    c = get_components()
+    
+    c['response_generator'].clear_context("default")
+    return {'status': 'cleared'}
 
 
 @router.post("/api/chat/search-and-respond")

@@ -1,8 +1,3 @@
-/**
- * GroundZero - Frontend Application
- * With Knowledge Explorer and real-time source updates
- */
-
 class GroundZeroApp {
     constructor() {
         this.isLearning = false;
@@ -94,6 +89,10 @@ class GroundZeroApp {
             if (e.target.id === 'zoom-modal') this.closeZoomModal();
         };
         
+        // Fullscreen
+        document.getElementById('fullscreen-btn').onclick = () => this.toggleFullscreen();
+        document.addEventListener('fullscreenchange', () => this.updateFullscreenButton());
+        
         // Knowledge Explorer
         document.getElementById('knowledge-explorer-btn').onclick = () => this.openKnowledgeExplorer();
         document.getElementById('ke-close').onclick = () => this.closeKnowledgeExplorer();
@@ -102,12 +101,70 @@ class GroundZeroApp {
         };
         document.getElementById('ke-search-input').oninput = (e) => this.filterKnowledge(e.target.value);
         
+        // Clear chat context
+        document.getElementById('clear-chat-btn').onclick = () => this.clearChatContext();
+        
         document.addEventListener('keydown', (e) => {
             if (e.key === 'Escape') {
                 this.closeZoomModal();
                 this.closeKnowledgeExplorer();
             }
         });
+    }
+    
+    // ========== CLEAR CHAT ==========
+    
+    async clearChatContext() {
+        try {
+            await fetch('/api/chat/clear-context', { method: 'POST' });
+            
+            // Clear UI
+            const container = document.getElementById('chat-messages');
+            container.innerHTML = `
+                <div class="message ai">
+                    <div class="avatar">🧠</div>
+                    <div class="content">
+                        <p>Chat context cleared! I've forgotten our previous conversation.</p>
+                        <p>Ask me anything - I'll search my knowledge to find answers.</p>
+                        <span class="time">Just now</span>
+                    </div>
+                </div>
+            `;
+            
+            this.toast('Chat context cleared', 'success');
+        } catch (e) {
+            this.toast('Failed to clear context', 'error');
+        }
+    }
+    
+    // ========== FULLSCREEN ==========
+    
+    toggleFullscreen() {
+        if (!document.fullscreenElement) {
+            // Enter fullscreen
+            document.documentElement.requestFullscreen().catch(err => {
+                this.toast('Fullscreen not available', 'error');
+            });
+        } else {
+            // Exit fullscreen
+            document.exitFullscreen();
+        }
+    }
+    
+    updateFullscreenButton() {
+        const btn = document.getElementById('fullscreen-btn');
+        const icon = document.getElementById('fs-icon');
+        const text = btn.querySelector('.fs-text');
+        
+        if (document.fullscreenElement) {
+            btn.classList.add('is-fullscreen');
+            icon.textContent = '⛶';
+            text.textContent = 'Exit';
+        } else {
+            btn.classList.remove('is-fullscreen');
+            icon.textContent = '⛶';
+            text.textContent = 'Fullscreen';
+        }
     }
     
     // ========== ZOOM MODAL ==========
@@ -251,6 +308,9 @@ class GroundZeroApp {
                     if (total.total_sessions !== undefined) {
                         this.safeSetText('sessions-count', this.formatNum(total.total_sessions));
                     }
+                    
+                    // Update knowledge explorer badge
+                    this.safeSetText('knowledge-badge', this.formatNum(total.total_knowledge || 0));
                     
                     // Only update sources every 30 new sources
                     const newSourceCount = total.total_sources || 0;

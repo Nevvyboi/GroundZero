@@ -1,11 +1,14 @@
 """
 Reasoning Engine
 ================
-Intelligent question answering using semantic search.
+Intelligent question answering using semantic search AND
+symbolic reasoning with persistent knowledge graph.
 
 Features:
-- Question classification
+- Persistent Knowledge Graph reasoning (SQLite-backed, survives restarts)
 - Semantic knowledge retrieval
+- Question classification
+- Inference engine
 - Confidence calibration
 - Answer synthesis
 """
@@ -16,6 +19,18 @@ from dataclasses import dataclass
 from enum import Enum
 
 from storage import KnowledgeBase
+
+# Import the advanced reasoner
+try:
+    from .advanced_reasoner import AdvancedReasoner
+    REASONER_AVAILABLE = True
+except ImportError:
+    try:
+        from advanced_reasoner import AdvancedReasoner
+        REASONER_AVAILABLE = True
+    except ImportError:
+        REASONER_AVAILABLE = False
+        print("⚠️ AdvancedReasoner not available")
 
 
 class QuestionType(Enum):
@@ -71,7 +86,7 @@ class ReasoningEngine:
             r'^good afternoon\b', r'^good evening\b', r'^thanks\b'
         ],
         QuestionType.META: [
-            r'\byou\b.*\bcan\b', r'\byour\b', r'groundzero', r'what can you',
+            r'\byou\b.*\bcan\b', r'\byour\b', r'neuralmind', r'what can you',
             r'who are you', r'what are you', r'about yourself'
         ]
     }
@@ -219,7 +234,7 @@ class ReasoningEngine:
         """Handle questions about the AI"""
         stats = self.kb.get_statistics()
         
-        response = f"""I'm **GroundZero**, an AI that learns from scratch!
+        response = f"""I'm **NeuralMind**, an AI that learns from scratch!
 
 📚 **My Knowledge:**
 - {stats['total_knowledge']:,} facts learned
@@ -280,30 +295,221 @@ I learn by reading Wikipedia and websites, then store knowledge as vectors for s
 
 class ResponseGenerator:
     """
-    Generates responses using the reasoning engine.
-    Provides a simple interface for the API.
+    Generates responses using BOTH:
+    1. Vector search (semantic similarity)
+    2. Advanced Knowledge Graph (symbolic AI with common sense)
+    
+    This combines retrieval with actual reasoning!
     """
     
-    def __init__(self, knowledge_base: KnowledgeBase):
+    def __init__(self, knowledge_base: KnowledgeBase, data_dir=None):
         self.kb = knowledge_base
         self.reasoning = ReasoningEngine(knowledge_base)
-        print("✅ Response Generator initialized")
+        
+        # Initialize the advanced reasoner (with common sense, analogies, multi-hop)
+        if REASONER_AVAILABLE and data_dir:
+            self.graph_reasoner = AdvancedReasoner(data_dir)
+            print("✅ Advanced Knowledge Graph Reasoner initialized")
+        else:
+            self.graph_reasoner = None
+        
+        # Import context manager
+        from .context import get_context, ConversationContext
+        self.get_context = get_context
+        
+        print("✅ Response Generator initialized (with context + advanced reasoning)")
     
-    def generate(self, query: str) -> Dict[str, Any]:
-        """Generate a response"""
+    def learn_to_graph(self, content: str, source: str = "") -> Dict[str, Any]:
+        """
+        Feed learned content to the persistent knowledge graph.
+        Called automatically when new knowledge is added.
+        """
+        if not self.graph_reasoner:
+            return {'facts_added': 0}
+        
+        result = self.graph_reasoner.learn(content, source)
+        return result
+    
+    def generate(self, query: str, session_id: str = "default") -> Dict[str, Any]:
+        """Generate a response with conversation context AND reasoning"""
+        context = self.get_context(session_id)
+        
+        # First, try to resolve any references in the query
+        resolved_entity, clarified_query = context.resolve_reference(query)
+        
+        if resolved_entity:
+            # User is referring to a previous entity
+            # Search specifically for that entity
+            results = self.kb.search(resolved_entity.name, limit=5)
+            
+            if results:
+                # Find the best match for this specific entity
+                best_match = None
+                for r in results:
+                    if resolved_entity.name.lower() in r.get('source_title', '').lower():
+                        best_match = r
+                        break
+                
+                if not best_match:
+                    best_match = results[0]
+                
+                answer = self._extract_focused_answer(resolved_entity.name, best_match.get('content', ''))
+                
+                # Update context
+                context.add_user_message(query)
+                context.add_assistant_response(answer, [{
+                    'name': resolved_entity.name,
+                    'content': answer[:200],
+                    'source_url': best_match.get('source_url', ''),
+                    'source_title': best_match.get('source_title', ''),
+                    'confidence': best_match.get('relevance', 0.7)
+                }])
+                
+                return {
+                    'response': answer,
+                    'confidence': best_match.get('relevance', 0.7),
+                    'sources': [{'url': best_match.get('source_url', ''), 
+                                'title': best_match.get('source_title', '')}],
+                    'needs_search': False,
+                    'resolved_from': resolved_entity.name,
+                    'thought_process': [{'step': f'Resolved reference to: {resolved_entity.name}', 
+                                        'type': 'context', 'confidence': 0.9}],
+                    'question_type': 'definition'
+                }
+        
+        # =====================================================
+        # HYBRID REASONING: Try Knowledge Graph FIRST
+        # =====================================================
+        graph_result = None
+        if self.graph_reasoner:
+            graph_result = self.graph_reasoner.reason(query)
+            
+            # If knowledge graph has a confident answer, use it
+            if graph_result and graph_result['confidence'] >= 0.6 and graph_result['facts_used'] > 0:
+                # High confidence from knowledge graph!
+                answer = graph_result['answer']
+                
+                # Still search vectors for sources/additional info
+                vector_results = self.kb.search(query, limit=3)
+                sources = [{'url': r.get('source_url', ''), 'title': r.get('source_title', '')} 
+                          for r in vector_results if r.get('source_url')]
+                
+                # Update context
+                context.add_user_message(query)
+                context.add_assistant_response(answer, [{
+                    'name': query,
+                    'content': answer[:200],
+                    'source_url': sources[0]['url'] if sources else '',
+                    'source_title': sources[0]['title'] if sources else '',
+                    'confidence': graph_result['confidence']
+                }])
+                
+                return {
+                    'response': answer,
+                    'confidence': graph_result['confidence'],
+                    'sources': sources[:3],
+                    'needs_search': False,
+                    'reasoning_type': 'knowledge_graph',
+                    'facts_used': graph_result['facts_used'],
+                    'thought_process': [
+                        {'step': 'Knowledge Graph Reasoning', 'type': 'graph', 
+                         'confidence': graph_result['confidence']},
+                        {'step': graph_result.get('reasoning_trace', ''), 'type': 'trace'}
+                    ],
+                    'question_type': graph_result.get('question_type', 'factual')
+                }
+        
+        # =====================================================
+        # FALLBACK: Use vector search + extraction
+        # =====================================================
         result = self.reasoning.reason(query)
+        
+        # Check if we need disambiguation
+        if result.answer and not result.needs_search:
+            raw_results = self.kb.search(query, limit=10)
+            
+            if context.needs_disambiguation(raw_results):
+                disambig_response, entities = context.format_disambiguation(query, raw_results)
+                
+                if disambig_response and entities:
+                    context.add_user_message(query)
+                    context.add_assistant_response(disambig_response, entities)
+                    
+                    sources = [{'url': e['source_url'], 'title': e['source_title']} 
+                              for e in entities if e['source_url']]
+                    
+                    return {
+                        'response': disambig_response,
+                        'confidence': 0.8,
+                        'sources': sources[:5],
+                        'needs_search': False,
+                        'disambiguation': True,
+                        'options': [e['name'] for e in entities],
+                        'thought_process': [{'step': 'Multiple matches found - asking for clarification',
+                                            'type': 'disambiguation', 'confidence': 0.8}],
+                        'question_type': 'disambiguation'
+                    }
+        
+        # Combine with graph reasoning if available but low confidence
+        if graph_result and graph_result['confidence'] > 0.1 and result.confidence < 0.5:
+            # Graph has something, vector search weak - blend them
+            if graph_result['answer'] and "don't have" not in graph_result['answer']:
+                result.answer = f"{graph_result['answer']}\n\n{result.answer}" if result.answer else graph_result['answer']
+                result.confidence = max(result.confidence, graph_result['confidence'])
+        
+        # Update context with this exchange
+        context.add_user_message(query)
+        
+        if result.answer:
+            entities = context.extract_entities_from_response(result.answer, result.sources)
+            context.add_assistant_response(result.answer, entities if entities else [{
+                'name': query,
+                'content': result.answer[:200] if result.answer else '',
+                'source_url': result.sources[0]['url'] if result.sources else '',
+                'source_title': result.sources[0]['title'] if result.sources else '',
+                'confidence': result.confidence
+            }])
         
         return {
             'response': result.answer,
             'confidence': result.confidence,
             'sources': result.sources,
             'needs_search': result.needs_search,
+            'reasoning_type': 'vector_search',
             'thought_process': result.thought_process,
             'question_type': result.question_type.value
         }
     
+    def _extract_focused_answer(self, entity_name: str, content: str) -> str:
+        """Extract answer focused on a specific entity"""
+        if not content:
+            return f"I found information about {entity_name} but couldn't extract details."
+        
+        # Get sentences mentioning the entity
+        sentences = re.split(r'(?<=[.!?])\s+', content)
+        relevant = []
+        
+        entity_lower = entity_name.lower()
+        entity_parts = set(entity_lower.split())
+        
+        for sent in sentences:
+            sent_lower = sent.lower()
+            # Check if sentence mentions entity
+            if entity_lower in sent_lower or any(part in sent_lower for part in entity_parts if len(part) > 3):
+                relevant.append(sent)
+        
+        if relevant:
+            answer = ' '.join(relevant[:4])
+            if len(answer) > 600:
+                answer = answer[:600] + '...'
+            return answer
+        
+        # Fallback to first part of content
+        return content[:500] + ('...' if len(content) > 500 else '')
+    
     def generate_after_learning(self, query: str, 
-                                learned: List[Dict] = None) -> Dict[str, Any]:
+                                learned: List[Dict] = None,
+                                session_id: str = "default") -> Dict[str, Any]:
         """Generate response after learning"""
         result = self.reasoning.reason(query)
         
@@ -319,6 +525,19 @@ class ResponseGenerator:
                     })
                     seen.add(url)
         
+        # Update context
+        context = self.get_context(session_id)
+        context.add_user_message(query)
+        if result.answer:
+            entities = [{
+                'name': lc.get('title', query),
+                'content': result.answer[:200] if result.answer else '',
+                'source_url': lc.get('url', ''),
+                'source_title': lc.get('title', ''),
+                'confidence': result.confidence
+            } for lc in (learned or [])]
+            context.add_assistant_response(result.answer, entities)
+        
         return {
             'response': result.answer,
             'confidence': result.confidence,
@@ -328,3 +547,8 @@ class ResponseGenerator:
             'question_type': result.question_type.value,
             'learned_from': learned
         }
+    
+    def clear_context(self, session_id: str = "default") -> None:
+        """Clear conversation context"""
+        from .context import clear_context
+        clear_context(session_id)

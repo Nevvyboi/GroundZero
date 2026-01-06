@@ -53,7 +53,7 @@ class VectorStore:
         self.index_path = self.data_dir / "vectors.faiss"
         
         # Thread safety
-        self._lock = threading.Lock()
+        self._lock = threading.RLock()  # Use RLock to allow reentrant locking
         
         # In-memory vector cache (for brute force search)
         self._vector_cache: Dict[int, np.ndarray] = {}
@@ -64,9 +64,21 @@ class VectorStore:
         # Load vectors into memory/FAISS
         self._load_vectors()
     
+    def _get_connection(self) -> sqlite3.Connection:
+        """Get a database connection with proper settings for concurrent access"""
+        conn = sqlite3.connect(
+            str(self.db_path),
+            timeout=30.0,  # Wait up to 30 seconds for lock
+            check_same_thread=False,  # Allow multi-threaded access
+            isolation_level=None  # Autocommit mode
+        )
+        conn.execute("PRAGMA journal_mode=WAL")  # Write-Ahead Logging for better concurrency
+        conn.execute("PRAGMA busy_timeout=30000")  # 30 second busy timeout
+        return conn
+    
     def _init_database(self) -> None:
         """Initialize SQLite database with vector storage"""
-        conn = sqlite3.connect(str(self.db_path))
+        conn = self._get_connection()
         
         # Main table with vector blob storage
         conn.execute("""
@@ -86,12 +98,11 @@ class VectorStore:
         conn.execute("CREATE INDEX IF NOT EXISTS idx_source_url ON vectors(source_url)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_source_title ON vectors(source_title)")
         
-        conn.commit()
         conn.close()
     
     def _load_vectors(self) -> None:
         """Load all vectors from database into memory/FAISS"""
-        conn = sqlite3.connect(str(self.db_path))
+        conn = self._get_connection()
         rows = conn.execute("SELECT id, vector_data FROM vectors WHERE vector_data IS NOT NULL").fetchall()
         conn.close()
         
@@ -162,14 +173,13 @@ class VectorStore:
         
         with self._lock:
             # Insert into SQLite with vector blob
-            conn = sqlite3.connect(str(self.db_path))
+            conn = self._get_connection()
             cursor = conn.execute(
                 """INSERT INTO vectors (content, source_url, source_title, confidence, vector_data, metadata)
                    VALUES (?, ?, ?, ?, ?, ?)""",
                 (content, source_url, source_title, confidence, vector_blob, json.dumps(metadata))
             )
             vector_id = cursor.lastrowid
-            conn.commit()
             conn.close()
             
             # Add to memory cache
@@ -222,7 +232,7 @@ class VectorStore:
                 scores, ids = self.index.search(query_vector, min(top_k * 2, self.index.ntotal))
                 
                 # Get metadata for each result
-                conn = sqlite3.connect(str(self.db_path))
+                conn = self._get_connection()
                 conn.row_factory = sqlite3.Row
                 
                 for score, vec_id in zip(scores[0], ids[0]):
@@ -266,7 +276,7 @@ class VectorStore:
                 
                 similarities.sort(key=lambda x: x[1], reverse=True)
                 
-                conn = sqlite3.connect(str(self.db_path))
+                conn = self._get_connection()
                 conn.row_factory = sqlite3.Row
                 
                 for vec_id, sim in similarities[:top_k]:
@@ -291,7 +301,7 @@ class VectorStore:
     
     def get_by_id(self, vector_id: int) -> Optional[Dict[str, Any]]:
         """Get a specific entry by ID"""
-        conn = sqlite3.connect(str(self.db_path))
+        conn = self._get_connection()
         conn.row_factory = sqlite3.Row
         row = conn.execute("SELECT * FROM vectors WHERE id = ?", (vector_id,)).fetchone()
         conn.close()
@@ -309,7 +319,7 @@ class VectorStore:
     
     def exists(self, source_url: str) -> bool:
         """Check if a source URL already exists"""
-        conn = sqlite3.connect(str(self.db_path))
+        conn = self._get_connection()
         row = conn.execute(
             "SELECT id FROM vectors WHERE source_url = ? LIMIT 1", (source_url,)
         ).fetchone()
@@ -328,10 +338,15 @@ class VectorStore:
     
     def get_stats(self) -> Dict[str, Any]:
         """Get vector store statistics"""
-        conn = sqlite3.connect(str(self.db_path))
-        total = conn.execute("SELECT COUNT(*) FROM vectors").fetchone()[0]
-        sources = conn.execute("SELECT COUNT(DISTINCT source_url) FROM vectors WHERE source_url != ''").fetchone()[0]
-        conn.close()
+        try:
+            conn = self._get_connection()
+            total = conn.execute("SELECT COUNT(*) FROM vectors").fetchone()[0]
+            sources = conn.execute("SELECT COUNT(DISTINCT source_url) FROM vectors WHERE source_url != ''").fetchone()[0]
+            conn.close()
+        except Exception as e:
+            print(f"Warning: Could not get stats: {e}")
+            total = len(self._vector_cache)
+            sources = 0
         
         return {
             'total_vectors': self.count(),
@@ -343,68 +358,82 @@ class VectorStore:
     
     def get_recent(self, limit: int = 10) -> List[Dict[str, Any]]:
         """Get recently added entries"""
-        conn = sqlite3.connect(str(self.db_path))
-        conn.row_factory = sqlite3.Row
-        rows = conn.execute(
-            "SELECT * FROM vectors ORDER BY created_at DESC LIMIT ?", (limit,)
-        ).fetchall()
-        conn.close()
-        
-        return [{
-            'id': row['id'],
-            'source_title': row['source_title'],
-            'source_url': row['source_url'],
-            'created_at': row['created_at']
-        } for row in rows]
+        try:
+            conn = self._get_connection()
+            conn.row_factory = sqlite3.Row
+            rows = conn.execute(
+                "SELECT * FROM vectors ORDER BY created_at DESC LIMIT ?", (limit,)
+            ).fetchall()
+            conn.close()
+            
+            return [{
+                'id': row['id'],
+                'source_title': row['source_title'],
+                'source_url': row['source_url'],
+                'created_at': row['created_at']
+            } for row in rows]
+        except Exception as e:
+            print(f"Warning: Could not get recent: {e}")
+            return []
     
     def get_all_knowledge(self, limit: int = 100) -> List[Dict[str, Any]]:
         """Get all knowledge entries with basic info"""
-        conn = sqlite3.connect(str(self.db_path))
-        conn.row_factory = sqlite3.Row
-        rows = conn.execute(
-            "SELECT id, source_title, source_url, confidence, created_at FROM vectors ORDER BY created_at DESC LIMIT ?", 
-            (limit,)
-        ).fetchall()
-        conn.close()
-        
-        return [{
-            'id': row['id'],
-            'title': row['source_title'],
-            'url': row['source_url'],
-            'confidence': row['confidence'],
-            'created_at': row['created_at']
-        } for row in rows]
+        try:
+            conn = self._get_connection()
+            conn.row_factory = sqlite3.Row
+            rows = conn.execute(
+                "SELECT id, source_title, source_url, confidence, created_at FROM vectors ORDER BY created_at DESC LIMIT ?", 
+                (limit,)
+            ).fetchall()
+            conn.close()
+            
+            return [{
+                'id': row['id'],
+                'title': row['source_title'],
+                'url': row['source_url'],
+                'confidence': row['confidence'],
+                'created_at': row['created_at']
+            } for row in rows]
+        except Exception as e:
+            print(f"Warning: Could not get all knowledge: {e}")
+            return []
     
     def get_all_with_content(self) -> List[Dict[str, Any]]:
         """Get all entries with their content for re-embedding"""
-        conn = sqlite3.connect(str(self.db_path))
-        conn.row_factory = sqlite3.Row
-        rows = conn.execute("SELECT id, content FROM vectors").fetchall()
-        conn.close()
-        
-        return [{'id': row['id'], 'content': row['content']} for row in rows]
+        try:
+            conn = self._get_connection()
+            conn.row_factory = sqlite3.Row
+            rows = conn.execute("SELECT id, content FROM vectors").fetchall()
+            conn.close()
+            
+            return [{'id': row['id'], 'content': row['content']} for row in rows]
+        except Exception as e:
+            print(f"Warning: Could not get all with content: {e}")
+            return []
     
     def update_vector(self, entry_id: int, new_vector: np.ndarray) -> None:
         """Update the vector for an existing entry"""
         vector_blob = new_vector.astype(np.float32).tobytes()
         
         with self._lock:
-            conn = sqlite3.connect(str(self.db_path))
-            conn.execute(
-                "UPDATE vectors SET vector_data = ? WHERE id = ?",
-                (vector_blob, entry_id)
-            )
-            conn.commit()
-            conn.close()
-            
-            # Update cache
-            self._vector_cache[entry_id] = new_vector.astype(np.float32)
-            
-            # Update FAISS if available
-            if FAISS_AVAILABLE and self.index is not None:
-                # FAISS doesn't support update, so we need to rebuild
-                # For now just update the cache - index will be rebuilt on save/load
-                pass
+            try:
+                conn = self._get_connection()
+                conn.execute(
+                    "UPDATE vectors SET vector_data = ? WHERE id = ?",
+                    (vector_blob, entry_id)
+                )
+                conn.close()
+                
+                # Update cache
+                self._vector_cache[entry_id] = new_vector.astype(np.float32)
+                
+                # Update FAISS if available
+                if FAISS_AVAILABLE and self.index is not None:
+                    # FAISS doesn't support update, so we need to rebuild
+                    # For now just update the cache - index will be rebuilt on save/load
+                    pass
+            except Exception as e:
+                print(f"Warning: Could not update vector: {e}")
     
     def get_related(self, entry_id: int, top_k: int = 5) -> List[Dict[str, Any]]:
         """Get entries related to a specific entry by vector similarity"""
@@ -418,76 +447,82 @@ class VectorStore:
             
             results = []
             
-            if FAISS_AVAILABLE and self.index.ntotal > 1:
+            if FAISS_AVAILABLE and self.index is not None and self.index.ntotal > 1:
                 # Search for similar vectors (get extra to exclude self)
                 scores, ids = self.index.search(query_vector, min(top_k + 1, self.index.ntotal))
                 
-                conn = sqlite3.connect(str(self.db_path))
-                conn.row_factory = sqlite3.Row
-                
-                for score, vec_id in zip(scores[0], ids[0]):
-                    if vec_id < 0 or int(vec_id) == entry_id:
-                        continue
+                try:
+                    conn = self._get_connection()
+                    conn.row_factory = sqlite3.Row
                     
-                    similarity = float(score)
-                    if similarity < 0.05:  # Min threshold (5%)
-                        continue
+                    for score, vec_id in zip(scores[0], ids[0]):
+                        if vec_id < 0 or int(vec_id) == entry_id:
+                            continue
+                        
+                        similarity = float(score)
+                        if similarity < 0.05:  # Min threshold (5%)
+                            continue
+                        
+                        row = conn.execute(
+                            "SELECT id, source_title, confidence FROM vectors WHERE id = ?", 
+                            (int(vec_id),)
+                        ).fetchone()
+                        
+                        if row:
+                            results.append({
+                                'id': row['id'],
+                                'title': row['source_title'],
+                                'confidence': row['confidence'],
+                                'similarity': round(similarity * 100, 1)
+                            })
+                        
+                        if len(results) >= top_k:
+                            break
                     
-                    row = conn.execute(
-                        "SELECT id, source_title, confidence FROM vectors WHERE id = ?", 
-                        (int(vec_id),)
-                    ).fetchone()
-                    
-                    if row:
-                        results.append({
-                            'id': row['id'],
-                            'title': row['source_title'],
-                            'confidence': row['confidence'],
-                            'similarity': round(similarity * 100, 1)
-                        })
-                    
-                    if len(results) >= top_k:
-                        break
-                
-                conn.close()
+                    conn.close()
+                except Exception as e:
+                    print(f"Warning: Error getting related: {e}")
             
             else:
                 # Brute force search
                 if len(self._vector_cache) <= 1:
                     return []
                 
-                conn = sqlite3.connect(str(self.db_path))
-                conn.row_factory = sqlite3.Row
-                
-                similarities = []
-                for vid, vec in self._vector_cache.items():
-                    if vid == entry_id:
-                        continue
-                    vec_arr = np.array(vec, dtype=np.float32)
-                    # Cosine similarity
-                    sim = np.dot(query_vector.flatten(), vec_arr) / (
-                        np.linalg.norm(query_vector) * np.linalg.norm(vec_arr) + 1e-9
-                    )
-                    similarities.append((vid, float(sim)))
-                
-                # Sort by similarity
-                similarities.sort(key=lambda x: x[1], reverse=True)
-                
-                for vid, sim in similarities[:top_k]:
-                    if sim < 0.05:  # Min threshold (5%)
-                        continue
-                    row = conn.execute(
-                        "SELECT id, source_title, confidence FROM vectors WHERE id = ?",
-                        (vid,)
-                    ).fetchone()
-                    if row:
-                        results.append({
-                            'id': row['id'],
-                            'title': row['source_title'],
-                            'confidence': row['confidence'],
-                            'similarity': round(sim * 100, 1)
-                        })
-                
-                conn.close()
+                try:
+                    conn = self._get_connection()
+                    conn.row_factory = sqlite3.Row
+                    
+                    similarities = []
+                    for vid, vec in self._vector_cache.items():
+                        if vid == entry_id:
+                            continue
+                        vec_arr = np.array(vec, dtype=np.float32)
+                        # Cosine similarity
+                        sim = np.dot(query_vector.flatten(), vec_arr) / (
+                            np.linalg.norm(query_vector) * np.linalg.norm(vec_arr) + 1e-9
+                        )
+                        similarities.append((vid, float(sim)))
+                    
+                    # Sort by similarity
+                    similarities.sort(key=lambda x: x[1], reverse=True)
+                    
+                    for vid, sim in similarities[:top_k]:
+                        if sim < 0.05:  # Min threshold (5%)
+                            continue
+                        row = conn.execute(
+                            "SELECT id, source_title, confidence FROM vectors WHERE id = ?",
+                            (vid,)
+                        ).fetchone()
+                        if row:
+                            results.append({
+                                'id': row['id'],
+                                'title': row['source_title'],
+                                'confidence': row['confidence'],
+                                'similarity': round(sim * 100, 1)
+                            })
+                    
+                    conn.close()
+                except Exception as e:
+                    print(f"Warning: Error getting related: {e}")
             
             return results

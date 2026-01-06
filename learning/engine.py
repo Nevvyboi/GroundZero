@@ -9,6 +9,7 @@ Features:
 - Progress tracking with callbacks
 - URL ingestion
 - Search and learn
+- **Persistent Knowledge Graph** (facts stored in SQLite)
 """
 
 import threading
@@ -29,12 +30,18 @@ class LearningEngine:
     - Session tracking persisted to database
     - Manual URL ingestion
     - Progress callbacks for UI updates
+    - **Persistent Knowledge Graph** for symbolic reasoning (SQLite-backed)
     """
     
-    def __init__(self, knowledge_base: KnowledgeBase):
+    def __init__(self, knowledge_base: KnowledgeBase, graph_reasoner=None):
         self.kb = knowledge_base
         self.wikipedia = WikipediaSearch()
         self.extractor = ContentExtractor()
+        
+        # Persistent Knowledge Graph Reasoner (SQLite-backed)
+        self.graph_reasoner = graph_reasoner
+        if self.graph_reasoner:
+            print("✅ Learning Engine connected to Persistent Knowledge Graph")
         
         # Learning state
         self.is_running = False
@@ -51,6 +58,7 @@ class LearningEngine:
             'articles_read': 0,
             'words_learned': 0,
             'knowledge_added': 0,
+            'facts_extracted': 0,  # Track knowledge graph facts
             'start_time': None,
             'current_article': None,
             'current_url': None,
@@ -78,8 +86,11 @@ class LearningEngine:
             'articles_read': 0,
             'words_learned': 0,
             'knowledge_added': 0,
+            'facts_extracted': 0,  # Track knowledge graph facts
             'start_time': self.session_start_time,
-            'current_article': None
+            'current_article': None,
+            'current_url': None,
+            'current_content': None
         }
         
         self._stop_event.clear()
@@ -118,7 +129,8 @@ class LearningEngine:
             'duration_seconds': duration,
             'articles_read': self.session_stats['articles_read'],
             'words_learned': self.session_stats['words_learned'],
-            'knowledge_added': self.session_stats['knowledge_added']
+            'knowledge_added': self.session_stats['knowledge_added'],
+            'facts_extracted': self.session_stats.get('facts_extracted', 0)
         }
         
         # Reset session
@@ -158,24 +170,37 @@ class LearningEngine:
                     if self._stop_event.is_set() or self.is_paused:
                         break
                     
-                    self._learn_article(article)
-                    time.sleep(0.2)  # Be nice to Wikipedia
+                    try:
+                        self._learn_article(article)
+                    except Exception as e:
+                        print(f"Error learning article: {e}")
+                    
+                    time.sleep(0.3)  # Be nice to Wikipedia
                 
                 batch_count += 1
                 
-                # Initialize embeddings after first batch
+                # Initialize embeddings after first batch (in background)
                 if batch_count == 1:
-                    self.kb.initialize_embeddings()
+                    threading.Thread(target=self._safe_init_embeddings, daemon=True).start()
                 
-                # Rebuild embeddings periodically
-                if batch_count % 20 == 0:
-                    self.kb.initialize_embeddings()
+                # Rebuild embeddings every 50 batches (less frequently, in background)
+                if batch_count % 50 == 0:
+                    threading.Thread(target=self._safe_init_embeddings, daemon=True).start()
                 
-                time.sleep(0.3)
+                time.sleep(0.5)
                 
             except Exception as e:
-                print(f"Learning error: {e}")
-                time.sleep(1)
+                print(f"Learning loop error: {e}")
+                import traceback
+                traceback.print_exc()
+                time.sleep(2)
+    
+    def _safe_init_embeddings(self):
+        """Safely initialize embeddings without blocking"""
+        try:
+            self.kb.initialize_embeddings()
+        except Exception as e:
+            print(f"Embeddings init error: {e}")
     
     def _learn_article(self, article: Dict[str, str]) -> bool:
         """Learn from a single article"""
@@ -214,6 +239,21 @@ class LearningEngine:
             source_title=title,
             confidence=0.7
         )
+        
+        # =====================================================
+        # PERSISTENT KNOWLEDGE GRAPH: Extract facts (SQLite-backed)
+        # =====================================================
+        facts_added = 0
+        if self.graph_reasoner and is_new:
+            try:
+                graph_result = self.graph_reasoner.learn(content, title)
+                facts_added = graph_result.get('facts_added', 0)
+                # Safely update facts_extracted
+                if 'facts_extracted' not in self.session_stats:
+                    self.session_stats['facts_extracted'] = 0
+                self.session_stats['facts_extracted'] += facts_added
+            except Exception as e:
+                print(f"Knowledge graph extraction error: {e}")
         
         if is_new:
             # Update in-memory session stats
@@ -325,9 +365,10 @@ class LearningEngine:
             'current_content': self.session_stats.get('current_content'),
             'current_session': {
                 'id': self.current_session_id,
-                'articles_read': self.session_stats['articles_read'],
-                'words_learned': self.session_stats['words_learned'],
-                'knowledge_added': self.session_stats['knowledge_added'],
+                'articles_read': self.session_stats.get('articles_read', 0),
+                'words_learned': self.session_stats.get('words_learned', 0),
+                'knowledge_added': self.session_stats.get('knowledge_added', 0),
+                'facts_extracted': self.session_stats.get('facts_extracted', 0),
                 'duration_seconds': int(session_time)
             },
             'all_sessions': session_summary,

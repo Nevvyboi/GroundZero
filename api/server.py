@@ -1,3 +1,10 @@
+"""
+API Server - FastAPI Edition
+============================
+FastAPI server with WebSocket support and proper startup/shutdown.
+Now with Knowledge Graph reasoning!
+"""
+
 import sys
 import asyncio
 from pathlib import Path
@@ -14,11 +21,22 @@ from storage import KnowledgeBase
 from learning import LearningEngine
 from reasoning import ResponseGenerator
 
+# Try to import Advanced Knowledge Graph Reasoner
+try:
+    from reasoning.advanced_reasoner import AdvancedReasoner
+    REASONER_AVAILABLE = True
+except ImportError:
+    REASONER_AVAILABLE = False
+    print("⚠️ Advanced Knowledge Graph not available")
+
+# Global components
 knowledge_base: Optional[KnowledgeBase] = None
 learning_engine: Optional[LearningEngine] = None
 response_generator: Optional[ResponseGenerator] = None
+graph_reasoner: Optional['AdvancedReasoner'] = None
 settings: Optional[Settings] = None
 
+# WebSocket connections for real-time updates
 active_connections: List[WebSocket] = []
 
 
@@ -27,8 +45,31 @@ def get_components():
     return {
         'kb': knowledge_base,
         'learner': learning_engine,
-        'response_generator': response_generator
+        'response_generator': response_generator,
+        'graph_reasoner': graph_reasoner
     }
+
+
+def print_banner():
+    """Print startup banner"""
+    print("""
+╔═══════════════════════════════════════════════════════════════╗
+║                                                               ║
+║      ██████╗ ██████╗  ██████╗ ██╗   ██╗███╗   ██╗██████╗     ║
+║     ██╔════╝ ██╔══██╗██╔═══██╗██║   ██║████╗  ██║██╔══██╗    ║
+║     ██║  ███╗██████╔╝██║   ██║██║   ██║██╔██╗ ██║██║  ██║    ║
+║     ██║   ██║██╔══██╗██║   ██║██║   ██║██║╚██╗██║██║  ██║    ║
+║     ╚██████╔╝██║  ██║╚██████╔╝╚██████╔╝██║ ╚████║██████╔╝    ║
+║      ╚═════╝ ╚═╝  ╚═╝ ╚═════╝  ╚═════╝ ╚═╝  ╚═══╝╚═════╝     ║
+║                                                               ║
+║         🧠 GroundZero - AI Built From Scratch 🧠              ║
+║                                                               ║
+║   Vector Search + Knowledge Graph + Common Sense Reasoning    ║
+║   Multi-hop • Analogies • Semantic Similarity • Inference     ║
+║                                                               ║
+╚═══════════════════════════════════════════════════════════════╝
+""")
+
 
 def print_step(message: str, done: bool = False):
     """Print startup step"""
@@ -50,11 +91,16 @@ async def broadcast_to_websockets(message: dict):
         if ws in active_connections:
             active_connections.remove(ws)
 
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-
-    global knowledge_base, learning_engine, response_generator, settings
+    """
+    Application lifespan manager.
+    Handles startup initialization and shutdown cleanup.
+    """
+    global knowledge_base, learning_engine, response_generator, graph_reasoner, settings
     
+    print_banner()
     print("\n📦 Initializing Components...\n")
     
     settings = Settings()
@@ -67,9 +113,29 @@ async def lifespan(app: FastAPI):
     )
     print_step("Knowledge Base ready", done=True)
     
-    # Step 2: Initialize Learning Engine
+    # Step 2: Initialize Advanced Knowledge Graph (with common sense, analogies, multi-hop)
+    if REASONER_AVAILABLE:
+        print_step("Initializing Advanced Knowledge Graph (Common Sense + Reasoning)")
+        graph_reasoner = AdvancedReasoner(settings.data_dir)
+        print_step("Advanced Knowledge Graph ready", done=True)
+    else:
+        graph_reasoner = None
+        print_step("Knowledge Graph not available (optional)", done=True)
+    
+    # Step 3: Initialize Response Generator (connects to Knowledge Graph)
+    print_step("Initializing Response Generator")
+    response_generator = ResponseGenerator(knowledge_base, data_dir=settings.data_dir)
+    
+    # Connect the graph reasoner to the response generator
+    if graph_reasoner and response_generator:
+        response_generator.graph_reasoner = graph_reasoner
+        print_step("Response Generator connected to Knowledge Graph", done=True)
+    else:
+        print_step("Response Generator ready (vector search only)", done=True)
+    
+    # Step 4: Initialize Learning Engine (connects to Knowledge Graph)
     print_step("Initializing Learning Engine")
-    learning_engine = LearningEngine(knowledge_base)
+    learning_engine = LearningEngine(knowledge_base, graph_reasoner=graph_reasoner)
     
     # Setup WebSocket callbacks
     def on_article_start(title, url):
@@ -101,11 +167,6 @@ async def lifespan(app: FastAPI):
     learning_engine.on_article_complete = on_article_complete
     print_step("Learning Engine ready", done=True)
     
-    # Step 3: Initialize Response Generator
-    print_step("Initializing Response Generator")
-    response_generator = ResponseGenerator(knowledge_base)
-    print_step("Response Generator ready", done=True)
-    
     # Print loaded statistics
     stats = knowledge_base.get_statistics()
     print("\n" + "=" * 55)
@@ -118,6 +179,9 @@ async def lifespan(app: FastAPI):
     print(f"  🔢 Vector dimension:   {stats['embeddings']['dimension']}")
     print(f"  🗃️  Index type:         {stats['vectors']['index_type']}")
     print(f"  💾 Data directory:     {settings.data_dir.absolute()}")
+    if graph_reasoner:
+        gr_stats = graph_reasoner.get_stats()
+        print(f"  🧠 Knowledge Graph:    {gr_stats['total_facts']} facts, {gr_stats['unique_subjects']} entities")
     print("=" * 55)
     
     if stats['total_knowledge'] > 0:
@@ -150,8 +214,8 @@ def create_app() -> FastAPI:
     """Create and configure FastAPI application"""
     app = FastAPI(
         title="GroundZero",
-        description="An AI that learns from scratch using vector databases",
-        version="3.0.0",
+        description="AI built from scratch - Vector Search + Knowledge Graph + Symbolic Reasoning",
+        version="3.1.0",
         lifespan=lifespan
     )
     
