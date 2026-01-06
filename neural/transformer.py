@@ -497,7 +497,7 @@ class GroundZeroTransformer(nn.Module):
     @classmethod
     def load(cls, path: Path, device: str = 'cpu') -> 'GroundZeroTransformer':
         """Load model from disk"""
-        checkpoint = torch.load(path, map_location=device)
+        checkpoint = torch.load(path, map_location=device, weights_only=False)
         model = cls(checkpoint['config'])
         model.load_state_dict(checkpoint['state_dict'])
         print(f"📂 Model loaded from {path}")

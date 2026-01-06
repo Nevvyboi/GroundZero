@@ -58,10 +58,12 @@ class TrainerConfig:
 
 
 class TextDataset(Dataset):
-    """Dataset for text sequences"""
+    """Dataset for text sequences with proper padding"""
     
-    def __init__(self, token_ids: List[List[int]], max_seq_len: int = 512):
+    def __init__(self, token_ids: List[List[int]], max_seq_len: int = 512, pad_id: int = 0):
         self.sequences = []
+        self.max_seq_len = max_seq_len
+        self.pad_id = pad_id
         
         # Split into chunks of max_seq_len
         for ids in token_ids:
@@ -75,6 +77,11 @@ class TextDataset(Dataset):
     
     def __getitem__(self, idx):
         seq = self.sequences[idx]
+        
+        # Pad sequence to max_seq_len + 1
+        if len(seq) < self.max_seq_len + 1:
+            seq = seq + [self.pad_id] * (self.max_seq_len + 1 - len(seq))
+        
         # Input and target are same sequence (autoregressive)
         return torch.tensor(seq[:-1]), torch.tensor(seq[1:])
 
@@ -239,7 +246,7 @@ class NeuralTrainer:
         # Initialize model
         self.model_path = self.data_dir / "model.pt"
         if self.model_path.exists():
-            self.model = GroundZeroTransformer.load(self.model_path, self.device)
+            self.model = GroundZeroTransformer.load(self.model_path, self.device)  # weights_only=False in load method
         else:
             model_config = self._get_model_config()
             self.model = GroundZeroTransformer(model_config)
@@ -298,7 +305,7 @@ class NeuralTrainer:
         """Load training state"""
         state_path = self.data_dir / "trainer_state.pt"
         if state_path.exists():
-            state = torch.load(state_path, map_location='cpu')
+            state = torch.load(state_path, map_location='cpu', weights_only=False)
             self.global_step = state.get('global_step', 0)
             self.total_tokens_trained = state.get('total_tokens_trained', 0)
             self.training_history = state.get('training_history', [])
@@ -409,11 +416,18 @@ class NeuralTrainer:
         if len(dataset) == 0:
             return {'error': 'No valid sequences after tokenization'}
         
+        # Custom collate to handle any remaining size differences
+        def collate_fn(batch):
+            inputs, targets = zip(*batch)
+            # Stack - should work now with padding
+            return torch.stack(inputs), torch.stack(targets)
+        
         dataloader = DataLoader(
             dataset,
             batch_size=self.config.batch_size,
             shuffle=True,
-            drop_last=True
+            drop_last=True,
+            collate_fn=collate_fn
         )
         
         # Training loop
