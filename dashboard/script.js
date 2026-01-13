@@ -1,4 +1,4 @@
-// GroundZero AI Dashboard - Swapped Layout
+// GroundZero AI Dashboard - Fixed Neural Stats
 
 const API_BASE = '/api';
 const POLL_INTERVAL = 2000;
@@ -6,8 +6,25 @@ const POLL_INTERVAL = 2000;
 let lossChart = null;
 let lastUpdateTime = null;
 
+// Stats object
+let stats = {
+    facts: 0, entities: 0, causal: 0, confidence: 70,
+    neural: {
+        epochs: 0,
+        loss: null,
+        embedDim: 100,
+        predictions: 0,
+        hypotheses: 0,
+        isTrained: false,
+        entities: 0,
+        relations: 0,
+        triples: 0
+    },
+    lossHistory: []
+};
+
 // =============================================================================
-// THEME SYSTEM
+// THEME
 // =============================================================================
 
 function toggleMode() {
@@ -31,14 +48,13 @@ function loadSavedTheme() {
         document.body.classList.add('light-mode');
         document.getElementById('modeToggle').textContent = '☀️';
     }
-    const theme = localStorage.getItem('gz-theme') || 'blue';
-    setTheme(theme);
+    setTheme(localStorage.getItem('gz-theme') || 'blue');
 }
 
 function updateChartColors() {
     if (!lossChart) return;
-    const style = getComputedStyle(document.documentElement);
-    lossChart.data.datasets[0].borderColor = style.getPropertyValue('--accent').trim();
+    const accent = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim();
+    lossChart.data.datasets[0].borderColor = accent;
     lossChart.update('none');
 }
 
@@ -65,7 +81,7 @@ document.addEventListener('keydown', e => {
 });
 
 // =============================================================================
-// MILESTONES & STATS
+// MILESTONES
 // =============================================================================
 
 const MILESTONES = [
@@ -77,12 +93,6 @@ const MILESTONES = [
     { level: 6, name: "Human-Like", facts: 500000 }
 ];
 
-let stats = {
-    facts: 0, entities: 0, causal: 0, confidence: 70,
-    neural: { epochs: 0, loss: null, embedDim: 0, predictions: 0, hypotheses: 0, isTrained: false, entities: 0, relations: 0, triples: 0 },
-    lossHistory: []
-};
-
 function getCurrentLevel() {
     for (let i = MILESTONES.length - 1; i >= 0; i--) {
         if (stats.facts >= MILESTONES[i].facts) return i + 1;
@@ -93,8 +103,7 @@ function getCurrentLevel() {
 function getProgress() {
     const lvl = getCurrentLevel();
     if (lvl >= MILESTONES.length) return 100;
-    const next = MILESTONES[lvl];
-    return Math.round((stats.facts / next.facts) * 100);
+    return Math.round((stats.facts / MILESTONES[lvl].facts) * 100);
 }
 
 // =============================================================================
@@ -105,44 +114,62 @@ function updateUI() {
     const lvl = getCurrentLevel();
     const prog = getProgress();
     
+    // Stats row
     setText('level', lvl);
     setText('facts', formatNum(stats.facts));
     setText('entities', formatNum(stats.entities));
     setText('causal', formatNum(stats.causal));
     setText('epochs', stats.neural.epochs);
-    setText('loss', stats.neural.loss ? stats.neural.loss.toFixed(4) : '-');
+    setText('loss', stats.neural.loss !== null ? stats.neural.loss.toFixed(4) : '-');
     setText('confidence', Math.round(stats.confidence) + '%');
     
+    // Progress panel
     setText('level-badge', 'LEVEL ' + lvl);
     setText('level-name', lvl > 0 ? MILESTONES[lvl-1].name : 'Starting Out');
-    document.getElementById('progress-bar').style.width = prog + '%';
+    setStyle('progress-bar', 'width', prog + '%');
     setText('progress-pct', prog + '%');
     
-    setText('embedDim', stats.neural.embedDim);
+    // Neural panel - ALL stats
+    setText('entityCount', formatNum(stats.neural.entities));
+    setText('relationCount', stats.neural.relations);
+    setText('tripleCount', formatNum(stats.neural.triples));
     setText('trainEpochs', stats.neural.epochs);
-    setText('lossVal', stats.neural.loss ? stats.neural.loss.toFixed(4) : '-');
+    setText('lossVal', stats.neural.loss !== null ? stats.neural.loss.toFixed(4) : '-');
     setText('predictions', stats.neural.predictions);
     setText('hypotheses', stats.neural.hypotheses);
+    setText('embedDim', stats.neural.embedDim);
     
-    setBar('embedBar', stats.neural.embedDim, 200);
+    // Progress bars - scaled appropriately
+    setBar('entityBar', stats.neural.entities, 10000);
+    setBar('relationBar', stats.neural.relations, 50);
+    setBar('tripleBar', stats.neural.triples, 10000);
     setBar('trainBar', stats.neural.epochs, 500);
-    setBar('lossBar', stats.neural.loss ? 100 - (stats.neural.loss * 100) : 0, 100);
+    setBar('lossBar', stats.neural.loss !== null ? (1 - stats.neural.loss) * 100 : 0, 100);
     
+    // Badge - shows state: No Data → Loaded → Trained
     const badge = document.getElementById('neuralBadge');
     if (badge) {
-        if (stats.neural.isTrained) { badge.textContent = 'Trained ✓'; badge.className = 'badge trained'; }
-        else if (stats.neural.epochs > 0) { badge.textContent = 'Training...'; badge.className = 'badge training'; }
-        else { badge.textContent = 'Not Trained'; badge.className = 'badge'; }
+        if (stats.neural.isTrained || stats.neural.epochs > 0) {
+            badge.textContent = 'Trained ✓';
+            badge.className = 'badge trained';
+        } else if (stats.neural.triples > 0) {
+            badge.textContent = 'Data Loaded';
+            badge.className = 'badge loaded';
+        } else {
+            badge.textContent = 'No Data';
+            badge.className = 'badge';
+        }
     }
+    
+    // Graph stats in modal
+    setText('gsEntities', formatNum(stats.neural.entities));
+    setText('gsRelations', stats.neural.relations);
+    setText('gsTriples', formatNum(stats.neural.triples));
+    setText('gsEmbedDim', stats.neural.embedDim);
     
     updateCapabilities();
     updateTimeline(lvl);
     updateLossChart();
-    
-    setText('gsEntities', stats.neural.entities);
-    setText('gsRelations', stats.neural.relations);
-    setText('gsTriples', stats.neural.triples);
-    setText('gsEmbedDim', stats.neural.embedDim);
 }
 
 function formatNum(n) {
@@ -156,6 +183,11 @@ function setText(id, val) {
     if (el) el.textContent = val;
 }
 
+function setStyle(id, prop, val) {
+    const el = document.getElementById(id);
+    if (el) el.style[prop] = val;
+}
+
 function setBar(id, val, max) {
     const el = document.getElementById(id);
     if (el) el.style.width = Math.min(100, (val / max) * 100) + '%';
@@ -164,8 +196,8 @@ function setBar(id, val, max) {
 function updateCapabilities() {
     const caps = [
         ['capUnderstand', stats.neural.entities > 0],
-        ['capGeneralize', stats.neural.isTrained],
-        ['capLearn', stats.neural.epochs > 0],
+        ['capGeneralize', stats.neural.isTrained || stats.neural.epochs > 0],
+        ['capLearn', stats.neural.triples > 0],
         ['capReason', stats.neural.predictions > 0],
         ['capCreate', stats.neural.hypotheses > 0]
     ];
@@ -179,8 +211,8 @@ function updateCapabilities() {
 function updateCapabilityModal() {
     const caps = [
         ['capStatusUnderstand', stats.neural.entities > 0],
-        ['capStatusGeneralize', stats.neural.isTrained],
-        ['capStatusLearn', stats.neural.epochs > 0],
+        ['capStatusGeneralize', stats.neural.isTrained || stats.neural.epochs > 0],
+        ['capStatusLearn', stats.neural.triples > 0],
         ['capStatusReason', stats.neural.predictions > 0],
         ['capStatusCreate', stats.neural.hypotheses > 0]
     ];
@@ -238,7 +270,7 @@ function initLossChart() {
     const ctx = document.getElementById('lossChart');
     if (!ctx) return;
     
-    const style = getComputedStyle(document.documentElement);
+    const accent = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim();
     
     lossChart = new Chart(ctx.getContext('2d'), {
         type: 'line',
@@ -246,7 +278,7 @@ function initLossChart() {
             labels: [],
             datasets: [{
                 data: [],
-                borderColor: style.getPropertyValue('--accent').trim(),
+                borderColor: accent,
                 backgroundColor: 'transparent',
                 borderWidth: 2,
                 tension: 0.4,
@@ -262,7 +294,7 @@ function initLossChart() {
                 y: { 
                     display: true,
                     grid: { color: 'rgba(128,128,128,0.1)' },
-                    ticks: { font: { size: 11 } }
+                    ticks: { font: { size: 10 } }
                 }
             }
         }
@@ -277,7 +309,7 @@ function updateLossChart() {
 }
 
 // =============================================================================
-// NEURAL GRAPH
+// NEURAL GRAPH - Improved visualization
 // =============================================================================
 
 function drawNeuralGraph() {
@@ -290,42 +322,101 @@ function drawNeuralGraph() {
     canvas.height = rect.height;
     
     const style = getComputedStyle(document.documentElement);
-    const accent = style.getPropertyValue('--accent').trim();
-    const accent2 = style.getPropertyValue('--accent2').trim();
+    const accent = style.getPropertyValue('--accent').trim() || '#1d9bf0';
+    const accent2 = style.getPropertyValue('--accent2').trim() || '#4db5f9';
     
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     
-    const count = Math.min(stats.neural.entities || 20, 40);
-    const nodes = [];
-    const cx = canvas.width / 2, cy = canvas.height / 2;
-    const r = Math.min(canvas.width, canvas.height) * 0.35;
+    const cx = canvas.width / 2;
+    const cy = canvas.height / 2;
     
-    for (let i = 0; i < count; i++) {
-        const angle = (i / count) * Math.PI * 2;
-        const dist = r * (0.6 + Math.random() * 0.4);
-        nodes.push({ x: cx + Math.cos(angle) * dist, y: cy + Math.sin(angle) * dist, type: Math.random() > 0.75 });
+    // Calculate node count based on actual data
+    const entityCount = Math.min(stats.neural.entities || 0, 60);
+    const relationCount = stats.neural.relations || 0;
+    
+    if (entityCount === 0) {
+        // No data - show empty state
+        ctx.fillStyle = style.getPropertyValue('--text2').trim() || '#8899a6';
+        ctx.font = '14px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText('No data loaded yet', cx, cy);
+        return;
     }
     
-    ctx.strokeStyle = 'rgba(128,128,128,0.15)';
+    // Create nodes in clusters (one cluster per relation type)
+    const nodes = [];
+    const numClusters = Math.max(relationCount, 1);
+    const nodesPerCluster = Math.ceil(entityCount / numClusters);
+    const mainRadius = Math.min(canvas.width, canvas.height) * 0.38;
+    
+    for (let c = 0; c < numClusters; c++) {
+        const clusterAngle = (c / numClusters) * Math.PI * 2;
+        const clusterCx = cx + Math.cos(clusterAngle) * mainRadius * 0.5;
+        const clusterCy = cy + Math.sin(clusterAngle) * mainRadius * 0.5;
+        
+        for (let i = 0; i < nodesPerCluster && nodes.length < entityCount; i++) {
+            const angle = (i / nodesPerCluster) * Math.PI * 2;
+            const r = 30 + Math.random() * 40;
+            nodes.push({
+                x: clusterCx + Math.cos(angle) * r,
+                y: clusterCy + Math.sin(angle) * r,
+                cluster: c
+            });
+        }
+    }
+    
+    // Draw connections (more connections = more triples)
+    const triplesRatio = Math.min(stats.neural.triples / entityCount, 3);
+    ctx.strokeStyle = 'rgba(128,128,128,0.12)';
     ctx.lineWidth = 1;
+    
     nodes.forEach((n, i) => {
-        for (let j = 0; j < 2; j++) {
-            const t = Math.floor(Math.random() * nodes.length);
-            if (t !== i) { ctx.beginPath(); ctx.moveTo(n.x, n.y); ctx.lineTo(nodes[t].x, nodes[t].y); ctx.stroke(); }
+        const connCount = Math.floor(1 + triplesRatio);
+        for (let j = 0; j < connCount; j++) {
+            // Prefer connections within same cluster
+            let targetIdx;
+            if (Math.random() > 0.3) {
+                // Same cluster
+                const sameCluster = nodes.filter((nn, idx) => nn.cluster === n.cluster && idx !== i);
+                if (sameCluster.length > 0) {
+                    const target = sameCluster[Math.floor(Math.random() * sameCluster.length)];
+                    targetIdx = nodes.indexOf(target);
+                }
+            }
+            if (!targetIdx) {
+                targetIdx = Math.floor(Math.random() * nodes.length);
+            }
+            
+            if (targetIdx !== i) {
+                ctx.beginPath();
+                ctx.moveTo(n.x, n.y);
+                ctx.lineTo(nodes[targetIdx].x, nodes[targetIdx].y);
+                ctx.stroke();
+            }
         }
     });
     
+    // Draw nodes with cluster colors
+    const clusterColors = [accent, accent2, '#17bf63', '#f97316', '#7856ff', '#e0245e'];
+    
     nodes.forEach(n => {
         ctx.beginPath();
-        ctx.arc(n.x, n.y, n.type ? 5 : 7, 0, Math.PI * 2);
-        ctx.fillStyle = n.type ? accent2 : accent;
+        ctx.arc(n.x, n.y, 5, 0, Math.PI * 2);
+        ctx.fillStyle = clusterColors[n.cluster % clusterColors.length];
         ctx.fill();
     });
     
+    // Draw center node
     ctx.beginPath();
-    ctx.arc(cx, cy, 12, 0, Math.PI * 2);
+    ctx.arc(cx, cy, 10, 0, Math.PI * 2);
     ctx.fillStyle = accent;
     ctx.fill();
+    
+    // Label
+    ctx.fillStyle = style.getPropertyValue('--text2').trim() || '#8899a6';
+    ctx.font = '11px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText(`${formatNum(stats.neural.entities)} entities · ${stats.neural.relations} relations`, cx, canvas.height - 10);
 }
 
 function refreshGraph() { drawNeuralGraph(); }
@@ -338,10 +429,20 @@ async function trainNeural() {
     const btn = event.target;
     btn.textContent = '⏳ Training...';
     btn.disabled = true;
+    
     try {
-        await fetch(`${API_BASE}/neural/train`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ epochs: 50 }) });
-        btn.textContent = '✓ Started!';
-        setTimeout(() => { btn.textContent = '🧠 Train Now'; btn.disabled = false; }, 2000);
+        const res = await fetch(`${API_BASE}/neural/train`, { 
+            method: 'POST', 
+            headers: { 'Content-Type': 'application/json' }, 
+            body: JSON.stringify({ epochs: 50 }) 
+        });
+        
+        if (res.ok) {
+            btn.textContent = '✓ Started!';
+            setTimeout(() => { btn.textContent = '🧠 Train Now'; btn.disabled = false; }, 2000);
+        } else {
+            throw new Error('Training failed');
+        }
     } catch (e) {
         btn.textContent = '🧠 Train Now';
         btn.disabled = false;
@@ -352,13 +453,25 @@ async function trainNeural() {
 async function generateHypotheses() {
     const list = document.getElementById('hypothesesList');
     list.innerHTML = '<div class="hypothesis">Loading...</div>';
+    
     try {
         const res = await fetch(`${API_BASE}/neural/hypotheses`);
-        const data = await res.json();
-        list.innerHTML = data.hypotheses?.length 
-            ? data.hypotheses.map(h => `<div class="hypothesis"><span>${h.Head} → ${h.Relation} → ${h.Tail}</span><span class="conf">${Math.round(h.Confidence * 100)}%</span></div>`).join('')
-            : '<div class="hypothesis">Train the network first!</div>';
-    } catch (e) { list.innerHTML = '<div class="hypothesis">Server offline</div>'; }
+        if (res.ok) {
+            const data = await res.json();
+            if (data.hypotheses && data.hypotheses.length) {
+                list.innerHTML = data.hypotheses.slice(0, 10).map(h => 
+                    `<div class="hypothesis">
+                        <span>${h.Head} → ${h.Relation} → ${h.Tail}</span>
+                        <span class="conf">${Math.round(h.Confidence * 100)}%</span>
+                    </div>`
+                ).join('');
+            } else {
+                list.innerHTML = '<div class="hypothesis">No hypotheses yet - need more data</div>';
+            }
+        }
+    } catch (e) { 
+        list.innerHTML = '<div class="hypothesis">Server offline</div>'; 
+    }
 }
 
 // =============================================================================
@@ -377,14 +490,27 @@ async function sendMessage() {
     const input = document.getElementById('chatInput');
     const text = input.value.trim();
     if (!text) return;
+    
     input.value = '';
     addMessage(text, 'user');
+    
     try {
-        const res = await fetch(`${API_BASE}/chat`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ message: text }) });
-        const data = await res.json();
-        addMessage(data.answer, 'bot');
-        stats.confidence = data.confidence * 100;
-    } catch (e) { addMessage("Offline. Start: python main.py dashboard", 'bot'); }
+        const res = await fetch(`${API_BASE}/chat`, { 
+            method: 'POST', 
+            headers: { 'Content-Type': 'application/json' }, 
+            body: JSON.stringify({ message: text }) 
+        });
+        
+        if (res.ok) {
+            const data = await res.json();
+            addMessage(data.answer, 'bot');
+            if (data.confidence) stats.confidence = data.confidence * 100;
+        } else {
+            throw new Error();
+        }
+    } catch (e) { 
+        addMessage("Server offline. Start: python main.py dashboard", 'bot'); 
+    }
 }
 
 function addMessage(text, sender) {
@@ -397,40 +523,63 @@ function addMessage(text, sender) {
 }
 
 // =============================================================================
-// API POLLING
+// API POLLING - Fixed field mapping
 // =============================================================================
 
 async function fetchStats() {
     try {
         const res = await fetch(`${API_BASE}/stats`);
+        if (!res.ok) throw new Error('API error');
+        
         const data = await res.json();
         
-        stats.facts = data.Knowledge?.TotalFacts || stats.facts;
-        stats.causal = data.Causal?.TotalRelations || stats.causal;
-        stats.confidence = (data.Chat?.AverageConfidence || 0.7) * 100;
+        // Debug: log what we receive
+        console.log('API Response:', data);
         
-        if (data.Neural) {
-            stats.neural = {
-                epochs: data.Neural.TrainingEpochs || 0,
-                loss: data.Neural.LastLoss,
-                embedDim: data.Neural.EmbeddingDim || 0,
-                predictions: data.Neural.Predictions || 0,
-                hypotheses: data.Neural.Hypotheses || 0,
-                isTrained: data.Neural.IsTrained || false,
-                entities: data.Neural.TotalEntities || 0,
-                relations: data.Neural.TotalRelations || 0,
-                triples: data.Neural.TotalTriples || 0
-            };
-            stats.entities = data.Neural.TotalEntities || 0;
+        // Map Knowledge stats
+        if (data.Knowledge) {
+            stats.facts = data.Knowledge.TotalFacts || 0;
         }
         
-        if (data.LossHistory) stats.lossHistory = data.LossHistory;
+        // Map Causal stats
+        if (data.Causal) {
+            stats.causal = data.Causal.TotalRelations || 0;
+        }
+        
+        // Map Chat stats
+        if (data.Chat) {
+            stats.confidence = (data.Chat.AverageConfidence || 0.7) * 100;
+        }
+        
+        // Map Neural stats - be careful with field names
+        if (data.Neural) {
+            stats.neural.entities = data.Neural.TotalEntities || 0;
+            stats.neural.relations = data.Neural.TotalRelations || 0;
+            stats.neural.triples = data.Neural.TotalTriples || 0;
+            stats.neural.embedDim = data.Neural.EmbeddingDim || 100;
+            stats.neural.epochs = data.Neural.TrainingEpochs || 0;
+            stats.neural.loss = data.Neural.LastLoss;
+            stats.neural.isTrained = data.Neural.IsTrained || false;
+            stats.neural.predictions = data.Neural.Predictions || 0;
+            stats.neural.hypotheses = data.Neural.Hypotheses || 0;
+            
+            // Also update top-level entities
+            stats.entities = stats.neural.entities;
+        }
+        
+        // Loss history
+        if (data.LossHistory && Array.isArray(data.LossHistory)) {
+            stats.lossHistory = data.LossHistory;
+        }
         
         setStatus('connected', 'Live');
         updateLastUpdated();
+        
     } catch (e) {
+        console.error('Fetch error:', e);
         setStatus('error', 'Offline');
     }
+    
     updateUI();
 }
 
@@ -451,7 +600,12 @@ document.addEventListener('DOMContentLoaded', () => {
     initChat();
     updateUI();
     updateLastUpdated();
+    
+    // Initial fetch
     fetchStats();
+    
+    // Poll every 2 seconds
     setInterval(fetchStats, POLL_INTERVAL);
+    
     console.log('🧠 GroundZero AI Dashboard loaded');
 });

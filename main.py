@@ -545,8 +545,40 @@ def Main():
     elif Command == "train":
         from src.auto_learner import AutoLearner
         GlobalState.Initialize()
+        
+        ArticleCount = [0]  # Use list for mutable closure
+        
+        def OnArticleLearned(Title, Facts, Causal):
+            """Callback after each article - trains neural every 10 articles"""
+            ArticleCount[0] += 1
+            
+            # Sync new facts to neural engine
+            GlobalState.SyncKnowledgeToNeural()
+            
+            # Train neural every 10 articles
+            if ArticleCount[0] % 10 == 0:
+                print(f"\n🧠 Auto-training neural network ({GlobalState.Neural.Stats.TotalTriples} triples)...")
+                GlobalState.Neural.Train(Epochs=20, Verbose=False)
+                loss = GlobalState.Neural.LossHistory[-1] if GlobalState.Neural.LossHistory else 0
+                print(f"   ✓ Trained! Loss: {loss:.4f}")
+                
+                # Save progress
+                GlobalState.Save()
+                print(f"   💾 Saved checkpoint\n")
+            
+            return True  # Continue learning
+        
         Learner = AutoLearner(GlobalState.Engine)
-        Learner.LearnContinuously()
+        
+        try:
+            Learner.LearnContinuously(Callback=OnArticleLearned)
+        finally:
+            # Final neural training when stopping
+            if GlobalState.Neural.Stats.TotalTriples > 0:
+                print(f"\n🧠 Final neural training ({GlobalState.Neural.Stats.TotalTriples} triples)...")
+                GlobalState.Neural.Train(Epochs=50, Verbose=True)
+                GlobalState.Save()
+                print("✅ Training complete and saved!")
     elif Command == "neural":
         TrainNeural()
     elif Command == "status":
