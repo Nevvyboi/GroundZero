@@ -1,0 +1,25 @@
+# GroundZero AI - Requirements
+# =============================
+
+# Core (no external dependencies needed for basic functionality!)
+
+# Optional: PyTorch for neural components
+# Uncomment to enable neural world model
+# torch>=2.0.0
+
+# Optional: For advanced NLP
+# spacy>=3.0.0
+# nltk>=3.8.0
+
+# Optional: For web dashboard enhancements
+# flask>=2.0.0
+# flask-cors>=3.0.0
+
+# Optional: For data visualization
+# matplotlib>=3.5.0
+# plotly>=5.0.0
+
+# Development dependencies
+# pytest>=7.0.0
+# black>=22.0.0
+# mypy>=0.990
